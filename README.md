@@ -1,6 +1,6 @@
 # PyTopo3D: 3D SIMP Topology Optimization Framework for Python
 
-![Optimized design with boundary conditions](assets/optimized_design_with_boundary_conditions.png)
+![Design optimization with boundary conditions](assets/optimization_animation.gif)
 
 
 A comprehensive Python implementation of 3D Topology Optimization based on SIMP (Solid Isotropic Material with Penalization) method. Unlike traditional MATLAB implementations, PyTopo3D brings the power of 3D SIMP-based optimization to the Python ecosystem with support for obstacle regions.
