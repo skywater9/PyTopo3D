@@ -19,7 +19,7 @@ This code performs 3D structural topology optimization using the SIMP (Solid Iso
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/PyTopo3D.git
+git clone https://github.com/jihoonkim888/PyTopo3D.git
 cd PyTopo3D
 ```
 
