@@ -39,33 +39,6 @@ For better performance, it's recommended to have PyPardiso installed, which requ
 - A compatible BLAS/LAPACK implementation
 - Intel MKL (included with PyPardiso)
 
-## Project Structure
-
-```
-PyTopo3D/
-├── README.md                  # This file
-├── requirements.txt           # Required dependencies
-├── main.py                    # Command-line interface
-├── run_with_obstacles.sh      # Script to run with obstacle configuration
-├── examples/                  # Example files
-│   ├── obstacles/             # Example obstacle configurations
-├── pytopo3d/                  # Main package
-│   ├── __init__.py
-│   ├── core/                  # Core optimization functionality
-│   │   ├── __init__.py
-│   │   ├── optimizer.py       # Main top3d function
-│   │   ├── compliance.py      # Element compliance calculation
-│   │   ├── utils/             # Utility functions
-│   │   └── obstacles.py       # Obstacle generation utilities
-│   └── visualization/         # Visualization utilities
-│       └── display.py         # 3D visualization functions
-└── examples/                  # Example scripts
-    ├── __init__.py
-    ├── obstacle_example.py    # Example with single obstacle
-    ├── multi_obstacle_example.py  # Example with multiple obstacles
-    └── obstacles_config.json  # Example obstacle configuration file
-```
-
 ## Usage
 
 ### Command-line Interface
