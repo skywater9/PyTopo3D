@@ -202,27 +202,6 @@ Supported obstacle types:
 
 All positions are specified as fractions [0-1] of the domain size, making it easy to reuse configurations across different mesh resolutions.
 
-## Examples
-
-The `examples/` directory contains:
-
-- `obstacle_example.py`: A basic example with a rectangular obstacle in the middle of the design domain.
-- `multi_obstacle_example.py`: An example that uses a JSON configuration file to define multiple obstacles.
-- `obstacles_config.json`: An example configuration file with multiple obstacle types.
-
-To run the examples:
-
-```bash
-python -m examples.obstacle_example
-python -m examples.multi_obstacle_example
-```
-
-Or use the provided script:
-
-```bash
-./run_with_obstacles.sh
-```
-
 ## Configuration
 
 The main optimization parameters are:
