@@ -1,0 +1,1 @@
+python main.py --nelx 30 --nely 15 --nelz 10 --volfrac 0.2 --penal 3.0 --rmin 3.0 --maxloop 100 --tolx 0.05 --obstacle-config examples/obstacles_config_cylinder.json --create-animation --animation-frequency 1 --verbose

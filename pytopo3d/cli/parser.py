@@ -103,6 +103,32 @@ def parse_args() -> argparse.Namespace:
         help="Description of the experiment (optional)",
     )
 
+    # Animation parameters
+    animation_group = parser.add_argument_group("Animation parameters")
+    animation_group.add_argument(
+        "--create-animation",
+        action="store_true",
+        help="Create a GIF animation of the optimization process",
+    )
+    animation_group.add_argument(
+        "--animation-frequency",
+        type=int,
+        default=10,
+        help="Store every N iterations for the animation (default: 10)",
+    )
+    animation_group.add_argument(
+        "--animation-frames",
+        type=int,
+        default=50,
+        help="Target number of frames to include in the animation (default: 50)",
+    )
+    animation_group.add_argument(
+        "--animation-fps",
+        type=int,
+        default=5,
+        help="Frames per second in the animation (default: 5)",
+    )
+
     # Obstacle related arguments
     obstacle_group = parser.add_argument_group("Obstacle parameters")
     obstacle_group.add_argument(

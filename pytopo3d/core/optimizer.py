@@ -35,6 +35,8 @@ def top3d(
     obstacle_mask=None,
     tolx: float = 0.01,
     maxloop: int = 2000,
+    save_history: bool = False,
+    history_frequency: int = 10,
 ):
     """
     Accelerated 3D Topology Optimization with optional obstacle region.
@@ -61,11 +63,17 @@ def top3d(
         maximum change in design variables is less than this value. Default is 0.01.
     maxloop : int, optional
         Maximum number of optimization iterations. Default is 2000.
+    save_history : bool, optional
+        Whether to save the optimization history for creating animations. Default is False.
+    history_frequency : int, optional
+        How often to save the density array to the history (every N iterations). Default is 10.
 
     Returns
     -------
-    ndarray
-        Optimized physical density array.
+    ndarray or tuple
+        If save_history is False, returns the optimized physical density array.
+        If save_history is True, returns a tuple (xPhys, history_dict) where history_dict
+        contains intermediate results for creating animations.
     """
 
     # ---------------------------
@@ -87,6 +95,13 @@ def top3d(
     # Number of "free" design elements (excluded obstacles)
     design_nele = nele - np.count_nonzero(obstacle_mask)
     logger.debug(f"Design elements: {design_nele}/{nele} ({design_nele / nele:.1%})")
+
+    # Initialize history dictionary if saving history
+    history = (
+        {"density_history": [], "iteration_history": [], "compliance_history": []}
+        if save_history
+        else None
+    )
 
     # ---------------------------
     # Build force vector & supports
@@ -140,6 +155,14 @@ def top3d(
     pbar = tqdm(
         total=maxloop, desc="Optimizing", ncols=100
     )  # Increased width for more info
+
+    # Store initial state if saving history
+    if save_history:
+        history["density_history"].append(xPhys.copy())
+        history["iteration_history"].append(0)
+        history["compliance_history"].append(
+            0.0
+        )  # placeholder, will be updated after first iteration
 
     # ---------------------------
     # START ITERATION
@@ -203,6 +226,14 @@ def top3d(
         # Compute the volume fraction only over the design domain
         current_volume_fraction = xPhys[~obstacle_mask].mean()
 
+        # Save history at specified frequency if requested
+        if save_history and (
+            loop % history_frequency == 0 or loop == 1 or change <= tolx
+        ):
+            history["density_history"].append(xPhys.copy())
+            history["iteration_history"].append(loop)
+            history["compliance_history"].append(float(c))
+
         # Log detailed iteration information at DEBUG level
         logger.debug(
             f"Iteration {loop}: Obj={c:.4f}, ΔObj={c_delta:.4f}, Vol={current_volume_fraction:.3f}, "
@@ -240,4 +271,8 @@ def top3d(
         f"Final volume fraction: {current_volume_fraction:.6f} (target: {volfrac:.6f})"
     )
 
-    return xPhys
+    # Return the optimized density and history if requested
+    if save_history:
+        return xPhys, history
+    else:
+        return xPhys

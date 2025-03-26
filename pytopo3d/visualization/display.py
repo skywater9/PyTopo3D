@@ -116,7 +116,7 @@ def display_3D(
 
     fig = plt.gcf()
     ax = fig.add_subplot(111, projection="3d")
-    ax.set_box_aspect((nelx, nely, nelz))
+    ax.set_box_aspect((nelx, nelz, nely))
 
     faces = np.array(
         [
@@ -172,8 +172,8 @@ def display_3D(
 
                 if display_voxel:
                     base_x = i
-                    base_y = nely - 1 - j
-                    base_z = k
+                    base_y = k
+                    base_z = nely - 1 - j
                     verts_global = local_verts + [base_x, base_y, base_z]
                     for f in faces:
                         poly_verts = verts_global[f].tolist()
@@ -207,8 +207,14 @@ def display_3D(
 
     ax.add_collection3d(pc)
     ax.set_xlim(0, nelx)
-    ax.set_ylim(0, nely)
-    ax.set_zlim(0, nelz)
+    ax.set_ylim(0, nelz)  # Y is now depth (z)
+    ax.set_zlim(0, nely)  # Z is now height (y)
+
+    # Set appropriate axis labels
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y (Depth)")
+    ax.set_zlabel("Z (Height)")
+
     # Isometric view
     ax.view_init(elev=30, azim=30)
 

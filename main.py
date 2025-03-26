@@ -18,6 +18,7 @@ from pytopo3d.utils.export import voxel_to_stl
 from pytopo3d.utils.logger import setup_logger
 from pytopo3d.utils.obstacles import parse_obstacle_config_file
 from pytopo3d.utils.results_manager import ResultsManager
+from pytopo3d.visualization.animation import save_optimization_gif
 from pytopo3d.visualization.runner import create_visualization
 
 
@@ -124,9 +125,17 @@ def main():
     tolx = getattr(args, "tolx", 0.01)  # Default to 0.01 if not provided
     maxloop = getattr(args, "maxloop", 2000)  # Default to 2000 if not provided
 
-    logger.debug(f"Optimization parameters: tolx={tolx}, maxloop={maxloop}")
+    # Check if creating animation is enabled
+    save_history = getattr(args, "create_animation", False)
+    history_frequency = getattr(args, "animation_frequency", 10)
 
-    xPhys = top3d(
+    logger.debug(
+        f"Optimization parameters: tolx={tolx}, maxloop={maxloop}, "
+        f"save_history={save_history}, history_frequency={history_frequency}"
+    )
+
+    # Run the optimization with history if requested
+    optimization_result = top3d(
         args.nelx,
         args.nely,
         args.nelz,
@@ -137,7 +146,19 @@ def main():
         obstacle_mask=obstacle_mask,
         tolx=tolx,
         maxloop=maxloop,
+        save_history=save_history,
+        history_frequency=history_frequency,
     )
+
+    # Check if we got history back
+    if save_history:
+        xPhys, history = optimization_result
+        logger.info(
+            f"Optimization history captured with {len(history['density_history'])} frames"
+        )
+    else:
+        xPhys = optimization_result
+        history = None
 
     end_time = time.time()
     run_time = end_time - start_time
@@ -171,6 +192,78 @@ def main():
         title="Optimized Design with Boundary Conditions",
     )
     logger.info(f"Combined visualization saved to {combined_viz_path}")
+
+    # Create GIF if history was captured
+    if save_history and history is not None:
+        try:
+            logger.info("Creating GIF visualization of optimization process...")
+
+            # Default to a reasonable number of frames for the animation
+            frames_to_include = getattr(args, "animation_frames", 50)
+
+            # If there are more frames than we want to include, sample them
+            history_frames = history["density_history"]
+            history_iterations = history["iteration_history"]
+            history_compliances = history["compliance_history"]
+
+            logger.debug(
+                f"Animation data: {len(history_frames)} density frames, "
+                f"{len(history_iterations)} iterations, "
+                f"{len(history_compliances)} compliance values"
+            )
+
+            if len(history_frames) > frames_to_include:
+                # Calculate sampling frequency
+                sample_rate = max(1, len(history_frames) // frames_to_include)
+                logger.debug(f"Sampling animation frames (every {sample_rate} frames)")
+            else:
+                sample_rate = 1
+
+            # Create the animation
+            try:
+                gif_path = save_optimization_gif(
+                    frames=history_frames,
+                    obstacle_mask=obstacle_mask,
+                    loads_array=loads_array,
+                    constraints_array=constraints_array,
+                    compliances=history_compliances,
+                    disp_thres=args.disp_thres,
+                    results_mgr=results_mgr,
+                    filename="optimization_animation",
+                    fps=getattr(args, "animation_fps", 5),
+                    every_n_iterations=sample_rate,
+                )
+
+                if os.path.exists(gif_path) and os.path.getsize(gif_path) > 0:
+                    logger.info(f"Optimization animation saved to {gif_path}")
+
+                    # Add animation details to metrics
+                    metrics = {
+                        "animation_created": True,
+                        "animation_frames": len(history_frames),
+                        "animation_frames_included": len(history_frames) // sample_rate,
+                        "animation_path": gif_path,
+                        "animation_fps": getattr(args, "animation_fps", 5),
+                    }
+                    results_mgr.update_metrics(metrics)
+                else:
+                    logger.error(
+                        f"Animation GIF file was not created properly or is empty: {gif_path}"
+                    )
+
+            except Exception as e:
+                logger.error(f"Error in save_optimization_gif function: {e}")
+                import traceback
+
+                logger.debug(
+                    f"Animation creation error details: {traceback.format_exc()}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error creating optimization animation: {e}")
+            import traceback
+
+            logger.debug(f"Animation error details: {traceback.format_exc()}")
 
     # Create metrics dictionary
     metrics = {
