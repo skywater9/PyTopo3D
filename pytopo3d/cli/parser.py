@@ -129,6 +129,30 @@ def parse_args() -> argparse.Namespace:
         help="Frames per second in the animation (default: 5)",
     )
 
+    # Design space parameters
+    design_space_group = parser.add_argument_group("Design space parameters")
+    design_space_group.add_argument(
+        "--design-space-stl",
+        type=str,
+        help="Path to an STL file defining the design space geometry",
+    )
+    design_space_group.add_argument(
+        "--auto-resolution",
+        action="store_true",
+        help="Automatically calculate resolution based on STL proportions",
+    )
+    design_space_group.add_argument(
+        "--max-resolution",
+        type=int,
+        default=100,
+        help="Maximum resolution for the largest dimension when using auto-resolution",
+    )
+    design_space_group.add_argument(
+        "--invert-design-space",
+        action="store_true",
+        help="Invert the design space (treat STL as void space rather than design space)",
+    )
+
     # Obstacle related arguments
     obstacle_group = parser.add_argument_group("Obstacle parameters")
     obstacle_group.add_argument(
@@ -181,8 +205,14 @@ def generate_experiment_name(args: argparse.Namespace) -> str:
     obstacle_type = "no_obstacle"
     if args.obstacle_config:
         obstacle_type = os.path.basename(args.obstacle_config).replace(".json", "")
+    
+    # Include design space STL info in experiment name if provided
+    design_space = ""
+    if hasattr(args, "design_space_stl") and args.design_space_stl:
+        stl_name = os.path.basename(args.design_space_stl).replace(".stl", "")
+        design_space = f"_ds_{stl_name}"
 
-    return f"{dims}_{obstacle_type}"
+    return f"{dims}_{obstacle_type}{design_space}"
 
 
 def create_config_dict(args: argparse.Namespace) -> Dict[str, Any]:

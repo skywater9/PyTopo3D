@@ -15,6 +15,7 @@ from pytopo3d.cli.parser import create_config_dict, generate_experiment_name, pa
 from pytopo3d.core.optimizer import top3d
 from pytopo3d.utils.boundary import create_boundary_arrays
 from pytopo3d.utils.export import voxel_to_stl
+from pytopo3d.utils.import_design_space import stl_to_design_space
 from pytopo3d.utils.logger import setup_logger
 from pytopo3d.utils.obstacles import parse_obstacle_config_file
 from pytopo3d.utils.results_manager import ResultsManager
@@ -54,6 +55,57 @@ def main():
         f"Results manager created with experiment directory: {results_mgr.experiment_dir}"
     )
 
+    # Handle design space from STL if provided
+    design_space_mask = None
+    if hasattr(args, "design_space_stl") and args.design_space_stl:
+        try:
+            logger.info(f"Loading design space from STL file: {args.design_space_stl}")
+            
+            # Determine resolution
+            if hasattr(args, "auto_resolution") and args.auto_resolution:
+                resolution = None
+                max_res = getattr(args, "max_resolution", 50)
+                logger.info(f"Auto-calculating resolution with max dimension of {max_res}")
+            else:
+                resolution = (args.nely, args.nelx, args.nelz)
+                logger.info(f"Using specified resolution: {resolution}")
+            
+            # Invert flag
+            invert = getattr(args, "invert_design_space", False)
+            if invert:
+                logger.info("Design space will be inverted (STL represents void space)")
+            
+            # Generate design space from STL
+            design_space_mask = stl_to_design_space(
+                args.design_space_stl,
+                resolution=resolution,
+                max_resolution=getattr(args, "max_resolution", 50),
+                invert=invert
+            )
+            
+            # If auto-resolution was used, update nelx, nely, nelz
+            if resolution is None:
+                args.nely, args.nelx, args.nelz = design_space_mask.shape
+                logger.info(f"Updated resolution based on STL: {args.nely}x{args.nelx}x{args.nelz}")
+            
+            # Save design space mask
+            design_space_path = os.path.join(results_mgr.experiment_dir, "design_space_mask.npy")
+            np.save(design_space_path, design_space_mask)
+            logger.info(f"Design space mask saved to {design_space_path}")
+            
+            # Copy the STL file to the experiment directory
+            results_mgr.copy_file(args.design_space_stl, "design_space.stl")
+            logger.debug("Copied design space STL file to experiment directory")
+            
+        except Exception as e:
+            logger.error(f"Error loading design space from STL: {e}")
+            import traceback
+            logger.debug(f"STL loading error details: {traceback.format_exc()}")
+            return
+    else:
+        logger.debug("No STL design space provided, using full rectangular domain")
+        design_space_mask = np.ones((args.nely, args.nelx, args.nelz), dtype=bool)
+
     # Create obstacle mask if requested
     obstacle_mask = None
 
@@ -80,8 +132,16 @@ def main():
         )
         obstacle_mask = np.zeros((args.nely, args.nelx, args.nelz), dtype=bool)
 
+    # Combine design space and obstacle masks
+    # Elements outside the design space are treated as obstacles
+    combined_obstacle_mask = obstacle_mask.copy()
+    if design_space_mask is not None:
+        # Areas outside design space (False values) become obstacles (True in obstacle mask)
+        combined_obstacle_mask = np.logical_or(combined_obstacle_mask, ~design_space_mask)
+        logger.info(f"Combined obstacle and design space masks, {np.count_nonzero(combined_obstacle_mask)} elements restricted")
+
     # Create obstacle array for visualization
-    obstacle_array = obstacle_mask.astype(float)
+    obstacle_array = combined_obstacle_mask.astype(float)
 
     # Create boundary condition arrays for visualization
     logger.debug("Creating boundary condition arrays")
@@ -143,7 +203,7 @@ def main():
         args.penal,
         args.rmin,
         args.disp_thres,
-        obstacle_mask=obstacle_mask,
+        obstacle_mask=combined_obstacle_mask,
         tolx=tolx,
         maxloop=maxloop,
         save_history=save_history,
@@ -170,7 +230,7 @@ def main():
 
     # Create design_only array (optimized design without obstacles)
     design_only = xPhys.copy()
-    design_only[obstacle_mask] = 0  # Remove design elements where obstacles are
+    design_only[combined_obstacle_mask] = 0  # Remove design elements where obstacles are
 
     # Create combined visualization with optimized design, loads, constraints, and obstacles
     logger.debug("Creating combined visualization")
@@ -223,7 +283,7 @@ def main():
             try:
                 gif_path = save_optimization_gif(
                     frames=history_frames,
-                    obstacle_mask=obstacle_mask,
+                    obstacle_mask=combined_obstacle_mask,
                     loads_array=loads_array,
                     constraints_array=constraints_array,
                     compliances=history_compliances,
@@ -284,6 +344,12 @@ def main():
     if args.obstacle_config:
         metrics["obstacle_config"] = args.obstacle_config
         metrics["obstacle_elements"] = int(np.sum(obstacle_mask))
+    
+    # Add design space info to metrics
+    if hasattr(args, "design_space_stl") and args.design_space_stl:
+        metrics["design_space_stl"] = args.design_space_stl
+        metrics["design_space_elements"] = int(np.sum(design_space_mask))
+        metrics["combined_restricted_elements"] = int(np.sum(combined_obstacle_mask))
 
     # Export the result as an STL file if requested
     if getattr(args, "export_stl", False):

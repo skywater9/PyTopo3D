@@ -148,7 +148,10 @@ def voxelize_mesh(
 
 
 def stl_to_design_space(
-    stl_file: str, resolution: Tuple[int, int, int], invert: bool = False
+    stl_file: str, 
+    resolution: Tuple[int, int, int] = None, 
+    max_resolution: int = 100,
+    invert: bool = False
 ) -> np.ndarray:
     """
     Convert an STL file to a design space mask.
@@ -161,8 +164,13 @@ def stl_to_design_space(
     ----------
     stl_file : str
         Path to the STL file.
-    resolution : tuple of int
+    resolution : tuple of int, optional
         The desired voxel grid resolution (nely, nelx, nelz).
+        If None, resolution will be automatically calculated based on mesh proportions 
+        and max_resolution.
+    max_resolution : int, optional
+        Maximum number of elements in the largest dimension when auto-calculating resolution.
+        Default is 100.
     invert : bool, optional
         If True, invert the mask (i.e., True becomes False and vice versa).
         This is useful when the STL represents a void space rather than the design space.
@@ -175,6 +183,28 @@ def stl_to_design_space(
     """
     # Import the STL file
     mesh = import_stl(stl_file)
+    
+    # Calculate resolution if not provided
+    if resolution is None:
+        # Get mesh extents (x, y, z)
+        extents = mesh.extents
+        
+        # Find the largest dimension to normalize against
+        max_extent = max(extents)
+        
+        # Calculate proportional resolution in each dimension
+        # Swap x,y,z to match our coordinate system (nely, nelx, nelz)
+        nelx = int(np.ceil(extents[0] / max_extent * max_resolution))
+        nely = int(np.ceil(extents[1] / max_extent * max_resolution))
+        nelz = int(np.ceil(extents[2] / max_extent * max_resolution))
+        
+        # Ensure minimum resolution of 2 in each dimension
+        nelx = max(nelx, 2)
+        nely = max(nely, 2)
+        nelz = max(nelz, 2)
+        
+        resolution = (nely, nelx, nelz)
+        print(f"Auto-calculated resolution: {resolution}")
 
     # Voxelize the mesh
     voxels = voxelize_mesh(mesh, resolution)
