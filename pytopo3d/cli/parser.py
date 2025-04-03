@@ -137,15 +137,10 @@ def parse_args() -> argparse.Namespace:
         help="Path to an STL file defining the design space geometry",
     )
     design_space_group.add_argument(
-        "--auto-resolution",
-        action="store_true",
-        help="Automatically calculate resolution based on STL proportions",
-    )
-    design_space_group.add_argument(
-        "--max-resolution",
-        type=int,
-        default=100,
-        help="Maximum resolution for the largest dimension when using auto-resolution",
+        "--pitch",
+        type=float,
+        default=1.0,
+        help="Distance between voxel centers when voxelizing STL (smaller values create finer detail)",
     )
     design_space_group.add_argument(
         "--invert-design-space",
@@ -210,7 +205,8 @@ def generate_experiment_name(args: argparse.Namespace) -> str:
     design_space = ""
     if hasattr(args, "design_space_stl") and args.design_space_stl:
         stl_name = os.path.basename(args.design_space_stl).replace(".stl", "")
-        design_space = f"_ds_{stl_name}"
+        pitch_info = f"_p{args.pitch}".replace(".", "p")
+        design_space = f"_ds_{stl_name}{pitch_info}"
 
     return f"{dims}_{obstacle_type}{design_space}"
 

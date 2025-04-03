@@ -6,7 +6,6 @@ This module enables the use of STL geometry to define the design space.
 """
 
 import os
-from typing import Tuple
 
 import numpy as np
 import trimesh
@@ -36,141 +35,58 @@ def import_stl(stl_file: str) -> trimesh.Trimesh:
         raise ImportError(f"Failed to load STL file: {e}")
 
 
-def voxelize_mesh(
-    mesh: trimesh.Trimesh, resolution: Tuple[int, int, int]
-) -> np.ndarray:
+def voxelize_mesh(mesh: trimesh.Trimesh, pitch: float = 1.0) -> np.ndarray:
     """
-    Convert a mesh to a voxel representation while preserving the original proportions.
+    Convert a mesh to a voxel representation.
+    Resolution is determined entirely by the mesh and the pitch value.
 
     Parameters
     ----------
     mesh : trimesh.Trimesh
         The mesh to voxelize.
-    resolution : tuple of int
-        The desired voxel grid resolution (nely, nelx, nelz).
+    pitch : float
+        The distance between voxel centers (smaller values create finer detail).
 
     Returns
     -------
     np.ndarray
         Boolean array where True values represent the interior of the mesh.
-        The array has shape (nely, nelx, nelz) to match the topology optimization format.
     """
-    nely, nelx, nelz = resolution
-
-    # Get the original mesh extents
+    # Get and print the mesh extents
     mesh_extents = mesh.extents  # [x_extent, y_extent, z_extent]
+    print(f"Mesh extents: {mesh_extents}")
+    print(f"Mesh bounds: {mesh.bounds}")
 
-    # Create a voxel grid with uniform pitch
+    # Create a voxel grid with specified pitch
     voxel_grid = trimesh.voxel.creation.voxelize(
         mesh=mesh,
-        pitch=1.0,  # We'll scale afterward
-        method="ray",
+        pitch=pitch,
+        method="subdivide",
     )
 
-    # Get the raw voxel data
-    original_voxels = voxel_grid.matrix
-    original_shape = np.array(original_voxels.shape)  # Ensure it's a numpy array
+    # Print voxel grid information
+    voxel_matrix = voxel_grid.matrix
+    print(f"Voxel grid shape: {voxel_matrix.shape}")
+    print(f"Voxel grid resolution determined by mesh and pitch: {voxel_matrix.shape}")
 
-    # Calculate the original aspect ratio
-    # Convert to our coordinate system: original_shape is [y, x, z]
-    original_aspect_ratio = np.array(
-        [
-            original_shape[0] / max(original_shape),  # y
-            original_shape[1] / max(original_shape),  # x
-            original_shape[2] / max(original_shape),  # z
-        ]
-    )
-
-    # Calculate target aspect ratio
-    target_shape = np.array([nely, nelx, nelz])
-    target_aspect_ratio = np.array(
-        [
-            nely / max(target_shape),
-            nelx / max(target_shape),
-            nelz / max(target_shape),
-        ]
-    )
-
-    # Create a new voxel array with the desired resolution
-    scaled_voxels = np.zeros((nely, nelx, nelz), dtype=bool)
-
-    # Calculate scaling factor that preserves proportions
-    # We'll use the minimum dimension to ensure the mesh fits
-    ratio_adjustment = target_aspect_ratio / original_aspect_ratio
-    adjusted_original_shape = original_shape * ratio_adjustment
-    scale_factors = target_shape / adjusted_original_shape
-    uniform_scale = min(scale_factors)
-
-    # Calculate the effective shape after uniform scaling
-    effective_shape = np.round(
-        original_shape * uniform_scale * ratio_adjustment
-    ).astype(int)
-
-    # Make sure effective shape doesn't exceed target shape
-    effective_shape = np.minimum(effective_shape, target_shape)
-
-    # Calculate offsets to center the model in the target grid
-    offsets = ((target_shape - effective_shape) / 2).astype(int)
-
-    # Map the original voxels to the new grid while maintaining proportions
-    for i in range(nely):
-        for j in range(nelx):
-            for k in range(nelz):
-                # Check if this voxel is within the effective shape (centered)
-                if (
-                    i >= offsets[0]
-                    and i < offsets[0] + effective_shape[0]
-                    and j >= offsets[1]
-                    and j < offsets[1] + effective_shape[1]
-                    and k >= offsets[2]
-                    and k < offsets[2] + effective_shape[2]
-                ):
-                    # Map back to the original voxel space
-                    # We need to account for both scaling and aspect ratio adjustment
-                    orig_i = int(
-                        (i - offsets[0]) / (uniform_scale * ratio_adjustment[0])
-                    )
-                    orig_j = int(
-                        (j - offsets[1]) / (uniform_scale * ratio_adjustment[1])
-                    )
-                    orig_k = int(
-                        (k - offsets[2]) / (uniform_scale * ratio_adjustment[2])
-                    )
-
-                    # Prevent out of bounds
-                    orig_i = min(max(orig_i, 0), original_shape[0] - 1)
-                    orig_j = min(max(orig_j, 0), original_shape[1] - 1)
-                    orig_k = min(max(orig_k, 0), original_shape[2] - 1)
-
-                    scaled_voxels[i, j, k] = original_voxels[orig_i, orig_j, orig_k]
-
-    return scaled_voxels
+    return voxel_matrix
 
 
 def stl_to_design_space(
     stl_file: str, 
-    resolution: Tuple[int, int, int] = None, 
-    max_resolution: int = 100,
+    pitch: float = 1.0,
     invert: bool = False
 ) -> np.ndarray:
     """
     Convert an STL file to a design space mask.
-
-    The function preserves the original aspect ratio (proportions) of the mesh,
-    scaling it uniformly to fit within the target resolution without distortion.
-    The voxelized mesh is centered within the design space.
+    The resolution is determined entirely by the mesh geometry and pitch value.
 
     Parameters
     ----------
     stl_file : str
         Path to the STL file.
-    resolution : tuple of int, optional
-        The desired voxel grid resolution (nely, nelx, nelz).
-        If None, resolution will be automatically calculated based on mesh proportions 
-        and max_resolution.
-    max_resolution : int, optional
-        Maximum number of elements in the largest dimension when auto-calculating resolution.
-        Default is 100.
+    pitch : float
+        The distance between voxel centers (smaller values create finer detail).
     invert : bool, optional
         If True, invert the mask (i.e., True becomes False and vice versa).
         This is useful when the STL represents a void space rather than the design space.
@@ -179,35 +95,12 @@ def stl_to_design_space(
     -------
     np.ndarray
         Boolean array where True values represent the design space.
-        The array has shape (nely, nelx, nelz) to match the topology optimization format.
     """
     # Import the STL file
     mesh = import_stl(stl_file)
     
-    # Calculate resolution if not provided
-    if resolution is None:
-        # Get mesh extents (x, y, z)
-        extents = mesh.extents
-        
-        # Find the largest dimension to normalize against
-        max_extent = max(extents)
-        
-        # Calculate proportional resolution in each dimension
-        # Swap x,y,z to match our coordinate system (nely, nelx, nelz)
-        nelx = int(np.ceil(extents[0] / max_extent * max_resolution))
-        nely = int(np.ceil(extents[1] / max_extent * max_resolution))
-        nelz = int(np.ceil(extents[2] / max_extent * max_resolution))
-        
-        # Ensure minimum resolution of 2 in each dimension
-        nelx = max(nelx, 2)
-        nely = max(nely, 2)
-        nelz = max(nelz, 2)
-        
-        resolution = (nely, nelx, nelz)
-        print(f"Auto-calculated resolution: {resolution}")
-
-    # Voxelize the mesh
-    voxels = voxelize_mesh(mesh, resolution)
+    # Voxelize the mesh with specified pitch
+    voxels = voxelize_mesh(mesh, pitch)
 
     # Invert if requested
     if invert:
