@@ -13,6 +13,7 @@ import numpy as np
 from pytopo3d.utils.boundary import create_boundary_arrays
 from pytopo3d.utils.import_design_space import stl_to_design_space
 from pytopo3d.utils.obstacles import parse_obstacle_config_file
+from pytopo3d.visualization.runner import create_visualization
 
 
 def load_geometry_data(
@@ -66,6 +67,14 @@ def load_geometry_data(
             # Copy the STL file to the experiment directory
             results_mgr.copy_file(args.design_space_stl, "design_space.stl")
             logger.debug("Copied design space STL file to experiment directory")
+            
+            # Visualize the design space mask
+            visualize_design_space_mask(
+                design_space_mask, 
+                args.experiment_name, 
+                results_mgr, 
+                logger
+            )
 
         except Exception as e:
             logger.error(f"Error loading design space from STL: {e}")
@@ -116,6 +125,43 @@ def load_geometry_data(
         )
 
     return design_space_mask, obstacle_mask, combined_obstacle_mask
+
+
+def visualize_design_space_mask(
+    design_space_mask, experiment_name, results_mgr, logger
+) -> str:
+    """
+    Create and save visualization of the design space mask.
+    
+    Args:
+        design_space_mask: Boolean array representing the design space
+        experiment_name: Name of the experiment
+        results_mgr: Results manager instance
+        logger: Logger instance
+        
+    Returns:
+        Path to the saved visualization
+    """
+    logger.info("Creating visualization of design space mask from STL")
+    
+    # Convert boolean mask to float for visualization
+    design_space_array = design_space_mask.astype(float)
+    
+    # Create visualization of just the design space
+    viz_path = create_visualization(
+        arrays=[design_space_array],
+        thresholds=[0.5],
+        colors=["green"],
+        labels=["Design Space"],
+        alphas=[0.7],
+        experiment_name=experiment_name,
+        results_mgr=results_mgr,
+        filename="design_space_mask",
+        title="Design Space Mask from STL",
+    )
+    
+    logger.info(f"Design space visualization saved to {viz_path}")
+    return viz_path
 
 
 def create_boundary_conditions(nelx, nely, nelz) -> Tuple[np.ndarray, np.ndarray]:
