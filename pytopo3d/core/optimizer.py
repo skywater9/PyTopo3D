@@ -170,7 +170,9 @@ def top3d(
         # Each element => 576 values; sK_full has shape (576*nele,)
         sK_full = np.kron(stiff_vals, KE.ravel())
 
-        # 2) Assemble global stiffness matrix directly using COO format which sums duplicates
+        # 2) Assemble global stiffness matrix using COO format
+        # The COO format automatically sums values for duplicate (i,j) entries during construction,
+        # ensuring that elements with shared DOFs properly contribute to the global stiffness matrix
         K = sp.csr_matrix((sK_full, (iK0, jK0)), shape=(ndof, ndof))
 
         # 3) Extract submatrix for free DOFs and solve

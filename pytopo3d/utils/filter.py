@@ -4,12 +4,17 @@ Filter utilities for 3D topology optimization.
 This module contains functions for building spatial density filters.
 """
 
+from typing import Tuple
+
 import numpy as np
 import scipy.sparse as sp
 from scipy.spatial import cKDTree  # Import cKDTree
 
+# Constants
+FLOAT_EPSILON = 1e-9  # Small epsilon for robust float comparisons
+DIST_EPSILON = 1e-12  # Small epsilon to avoid sqrt of zero
 
-def build_filter(nelx: int, nely: int, nelz: int, rmin: float) -> tuple[sp.csr_matrix, np.ndarray]:
+def build_filter(nelx: int, nely: int, nelz: int, rmin: float) -> Tuple[sp.csr_matrix, np.ndarray]:
     """
     Build the density filter matrix using KD-tree for neighbor search
     but replicating the original integer-based distance calculation for accuracy.
@@ -73,13 +78,13 @@ def build_filter(nelx: int, nely: int, nelz: int, rmin: float) -> tuple[sp.csr_m
         # Calculate distances using original integer-based formula
         dist_sq = (i1 - i2_neighbors)**2 + (j1 - j2_neighbors)**2 + (k1 - k2_neighbors)**2
         # Avoid sqrt of zero if e1 == e2
-        dist = np.sqrt(np.maximum(dist_sq, 1e-12)) # Add tiny epsilon before sqrt
+        dist = np.sqrt(np.maximum(dist_sq, DIST_EPSILON)) # Add tiny epsilon before sqrt
 
         # Calculate filter weights (linear decay)
         weights = rmin - dist
 
         # Filter using the original threshold condition (val > 0.0)
-        valid_mask = weights > 1e-9 # Use small epsilon for float comparison robustness
+        valid_mask = weights > FLOAT_EPSILON # Use small epsilon for float comparison robustness
         
         # Get the actual neighbors (e2 indices) and their weights
         valid_e2_indices = np.array(potential_neighbors)[valid_mask]
