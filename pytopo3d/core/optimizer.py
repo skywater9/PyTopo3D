@@ -119,14 +119,8 @@ def top3d(
     # Build edofMat, and global indexing arrays iK, jK
     logger.debug("Building element DOF matrix and indexing arrays")
     edofMat, iK, jK = build_edof(nelx, nely, nelz)
-    # Precompute the mapping from the full (iK,jK) to unique global indices.
-    pairs = np.vstack(((iK - 1), (jK - 1))).T  # shape (576*nele, 2)
-    unique_pairs, assembly_map = np.unique(pairs, axis=0, return_inverse=True)
-    nUnique = unique_pairs.shape[0]
-    K_template = sp.csr_matrix(
-        (np.zeros(nUnique, dtype=np.float64), (unique_pairs[:, 0], unique_pairs[:, 1])),
-        shape=(ndof, ndof),
-    )
+    # Convert to 0-based indices for sparse matrix construction (do this once)
+    iK0, jK0 = iK - 1, jK - 1
 
     # ---------------------------
     # Build filter matrix H (once) and Hs
@@ -176,12 +170,13 @@ def top3d(
         # Each element => 576 values; sK_full has shape (576*nele,)
         sK_full = np.kron(stiff_vals, KE.ravel())
 
-        # 2) Sum duplicates via precomputed assembly_map:
-        K_data = np.bincount(assembly_map, weights=sK_full, minlength=nUnique)
-        K_template.data[:] = K_data
+        # 2) Assemble global stiffness matrix using COO format
+        # The COO format automatically sums values for duplicate (i,j) entries during construction,
+        # ensuring that elements with shared DOFs properly contribute to the global stiffness matrix
+        K = sp.csr_matrix((sK_full, (iK0, jK0)), shape=(ndof, ndof))
 
-        # 3) Extract reduced K and solve
-        K_ff = K_template[freedofs0, :][:, freedofs0]
+        # 3) Extract submatrix for free DOFs and solve
+        K_ff = K[freedofs0, :][:, freedofs0]
         F_f = F[freedofs0]
         U_f = solver(K_ff, F_f)
         U[:] = 0.0
