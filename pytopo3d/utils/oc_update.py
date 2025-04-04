@@ -7,6 +7,7 @@ using the optimality criteria method.
 
 import numpy as np
 
+
 def optimality_criteria_update(x, dc, dv, volfrac, H, Hs, nele, obstacle_mask, design_nele):
     """
     Performs the optimality criteria (OC) update with bisection on the Lagrange
@@ -52,15 +53,23 @@ def optimality_criteria_update(x, dc, dv, volfrac, H, Hs, nele, obstacle_mask, d
     while (l2 - l1) / (l1 + l2) > 1e-3:
         lmid = 0.5 * (l2 + l1)
 
-        # Standard OC update
-        x_candidate = x * np.sqrt(-dc / dv / lmid)
+        # Standard OC update - Calculate with checks for numerical stability
+        # Calculate the term inside the square root
+        update_term = -dc / (dv * lmid)
+
+        # Handle potential issues: dv near zero or negative term inside sqrt
+        update_term[dv < 1e-9] = 0.0  # Avoid division by zero or tiny dv
+        update_term[update_term < 0] = 0.0  # Avoid sqrt of negative numbers
+
+        # Now calculate sqrt and update x (problematic terms result in factor 0)
+        x_candidate = x * np.sqrt(update_term)
+
+        # Original clipping and forcing obstacles to zero:
         x_candidate = np.clip(
             x_candidate,
             np.maximum(0.0, x - move),
             np.minimum(1.0, x + move),
         )
-
-        # Force obstacle region to remain at 0 in the candidate
         x_candidate[obstacle_mask] = 0.0
 
         # Filter the candidate

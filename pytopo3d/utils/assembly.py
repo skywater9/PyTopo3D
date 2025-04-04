@@ -8,6 +8,7 @@ boundary conditions, and element DOF matrices.
 import numpy as np
 import scipy.sparse as sp
 
+
 def build_force_vector(nelx, nely, nelz, ndof):
     """
     Build the force vector.
