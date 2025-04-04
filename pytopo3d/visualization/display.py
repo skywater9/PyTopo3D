@@ -10,8 +10,81 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
+from matplotlib.patches import FancyArrowPatch
+from mpl_toolkits.mplot3d import proj3d
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from numpy.typing import NDArray
+
+
+class Arrow3D(FancyArrowPatch):
+    """
+    A 3D arrow for use in matplotlib 3D plots.
+    """
+    def __init__(self, xs, ys, zs, *args, **kwargs):
+        super().__init__((0, 0), (0, 0), *args, **kwargs)
+        self._verts3d = xs, ys, zs
+
+    def do_3d_projection(self, renderer=None):
+        xs3d, ys3d, zs3d = self._verts3d
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
+        self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
+        return np.min(zs)
+
+
+def _add_axis_legend(ax, fig):
+    """
+    Add axis direction indicators as a separate legend/annotation in the corner
+    of the figure rather than on the plot itself.
+    
+    Parameters
+    ----------
+    ax : Axes3D
+        The 3D axes to add the indicators to
+    fig : Figure
+        The figure object
+    """
+    # Create a small axis for the legend in the bottom right corner
+    # Use a smaller area and position it to not interfere with the title
+    legend_ax = fig.add_axes([0.75, 0.05, 0.2, 0.2], projection='3d')
+    
+    # Create short arrows for X, Y, Z with equal length
+    # Start from origin point
+    origin = np.array([0, 0, 0])
+    
+    # Create arrows for each axis with same length
+    arrow_length = 0.8
+    
+    # X-axis (Red)
+    x_arrow = Arrow3D([0, arrow_length], [0, 0], [0, 0], 
+                      mutation_scale=15, lw=2, arrowstyle='-|>', color='red')
+    legend_ax.add_artist(x_arrow)
+    legend_ax.text(arrow_length + 0.1, 0, 0, "X", color='red', fontsize=12, fontweight='bold')
+    
+    # Z-axis (Blue) - Swapped with Y
+    z_arrow = Arrow3D([0, 0], [0, arrow_length], [0, 0], 
+                      mutation_scale=15, lw=2, arrowstyle='-|>', color='blue')
+    legend_ax.add_artist(z_arrow)
+    legend_ax.text(0, arrow_length + 0.1, 0, "Z", color='blue', fontsize=12, fontweight='bold')
+    
+    # Y-axis (Green) - Swapped with Z
+    y_arrow = Arrow3D([0, 0], [0, 0], [0, arrow_length], 
+                      mutation_scale=15, lw=2, arrowstyle='-|>', color='green')
+    legend_ax.add_artist(y_arrow)
+    legend_ax.text(0, 0, arrow_length + 0.1, "Y", color='green', fontsize=12, fontweight='bold')
+    
+    # Set axis limits and view angle for the legend
+    legend_ax.set_xlim([-0.2, 1.2])
+    legend_ax.set_ylim([-0.2, 1.2])
+    legend_ax.set_zlim([-0.2, 1.2])
+    
+    # Use the same view angle as the main plot
+    elev, azim = ax.elev, ax.azim
+    legend_ax.view_init(elev=elev, azim=azim)
+    
+    # Hide spines, ticks, and labels
+    legend_ax.set_axis_off()
+    
+    return legend_ax
 
 
 def display_3D(
@@ -115,6 +188,9 @@ def display_3D(
         color_maps.append(cmap)
 
     fig = plt.gcf()
+    
+    # Make the main axes slightly smaller to accommodate the axis legend
+    # without affecting the title position
     ax = fig.add_subplot(111, projection="3d")
     ax.set_box_aspect((nelx, nelz, nely))
 
@@ -217,7 +293,7 @@ def display_3D(
 
     # Isometric view
     ax.view_init(elev=30, azim=30)
-
+    
     # Add color legend patches with custom gradient swatches
     legend_elements = []
 
@@ -241,6 +317,9 @@ def display_3D(
         cbar = plt.colorbar(sm, ax=ax, shrink=0.7)
         cbar.set_label(f"Density ({labels[0]})")
 
+    # Add axis direction indicators as a legend AFTER other elements
+    _add_axis_legend(ax, fig)
+    
     plt.axis("off")
 
     return fig
