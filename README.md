@@ -175,6 +175,90 @@ Supported obstacle types:
 
 All positions are specified as fractions [0-1] of the domain size, making it easy to reuse configurations across different mesh resolutions.
 
+## Design Space from STL Files
+
+PyTopo3D allows using STL files to define the design space geometry, enabling complex shapes beyond the standard rectangular domain.
+
+### Command Line Usage
+
+To use an STL file to define your design space:
+
+```bash
+python main.py --design-space-stl path/to/design_space.stl --pitch 0.5
+```
+
+Command line options:
+- `--design-space-stl`: Path to an STL file defining the design space geometry
+- `--pitch`: Distance between voxel centers when voxelizing STL (default: 1.0, smaller values create finer detail)
+- `--invert-design-space`: Flag to invert the design space (treat STL as void space rather than design space)
+
+### How It Works
+
+1. The STL file is loaded using the Trimesh library
+2. The mesh is voxelized using the specified pitch value
+3. The resolution of the resulting voxel grid is determined by the mesh geometry and pitch
+4. The voxel grid becomes the design space mask (True values represent the design space)
+5. A visualization of the design space is created and saved
+6. The optimization is constrained to only operate within the design space
+
+### Understanding Pitch and Resolution
+
+The `pitch` parameter directly controls the resolution of the voxelized model:
+
+- `pitch` represents the distance between voxel centers in the same units as your STL file
+- Smaller pitch values create higher resolution voxelizations
+- The number of voxels along any dimension = physical length ÷ pitch
+
+For example:
+- If your STL file has a length of 100mm on one side and you set `pitch=5`, you'll get 100mm ÷ 5mm = 20 voxels along that dimension
+- Using `pitch=2` on the same model would result in 100mm ÷ 2mm = 50 voxels, creating a higher resolution representation
+- Using `pitch=10` would result in only 10 voxels, creating a coarser representation
+
+Choose your pitch value based on:
+1. The level of detail needed for your optimization
+2. The computational resources available (smaller pitch = more voxels = more computation)
+3. The physical size of your STL model
+
+### Python API Usage
+
+You can also use this functionality directly in your Python code:
+
+```python
+from pytopo3d.utils.import_design_space import stl_to_design_space
+import numpy as np
+
+# Convert STL to design space mask
+design_space_mask = stl_to_design_space(
+    stl_file="path/to/design_space.stl",
+    pitch=0.5,  # Smaller values create finer detail
+    invert=False  # Set to True if STL represents void space
+)
+
+# The shape of the mask is determined by the STL geometry and pitch
+nely, nelx, nelz = design_space_mask.shape
+print(f"Resolution from voxelization: {nely}x{nelx}x{nelz}")
+
+# Use the mask in optimization
+# Areas outside the design space (False values) are treated as obstacles
+from pytopo3d.core.optimizer import top3d
+
+result = top3d(
+    nelx=nelx, 
+    nely=nely, 
+    nelz=nelz, 
+    volfrac=0.3, 
+    penal=3.0, 
+    rmin=3.0,
+    disp_thres=0.5,
+    obstacle_mask=~design_space_mask  # Areas outside design space become obstacles
+)
+```
+
+Using STL files for design space definition allows you to:
+- Import complex geometries from CAD software
+- Perform topology optimization within arbitrary shapes
+- Combine with obstacle configurations for advanced design constraints
+
 ## Configuration
 
 The main optimization parameters are:
