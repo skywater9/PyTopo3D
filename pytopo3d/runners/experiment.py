@@ -7,7 +7,7 @@ This module contains functions for setting up and managing topology optimization
 import logging
 import os
 import time
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
@@ -18,35 +18,73 @@ from pytopo3d.utils.logger import setup_logger
 from pytopo3d.utils.results_manager import ResultsManager
 
 
-def setup_experiment(args) -> Tuple[logging.Logger, ResultsManager]:
+def setup_experiment(
+    verbose: bool = False,
+    quiet: bool = False,
+    log_level: str = "INFO",
+    log_file: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+    description: Optional[str] = None,
+    nelx: int = 40,
+    nely: int = 20,
+    nelz: int = 10,
+    volfrac: float = 0.3, 
+    penal: float = 3.0,
+    rmin: float = 1.5
+) -> Tuple[logging.Logger, ResultsManager]:
     """
     Set up experiment name, logging, and results manager.
 
     Args:
-        args: Command-line arguments
+        verbose: Whether to enable verbose logging
+        quiet: Whether to enable quiet mode
+        log_level: Logging level
+        log_file: Path to log file
+        experiment_name: Name of the experiment (if None, will be generated)
+        description: Description of the experiment
+        nelx: Number of elements in x direction (for name generation)
+        nely: Number of elements in y direction (for name generation)
+        nelz: Number of elements in z direction (for name generation)
+        volfrac: Volume fraction (for name generation)
+        penal: Penalization factor (for name generation)
+        rmin: Filter radius (for name generation)
 
     Returns:
         Tuple containing configured logger and results manager
     """
-    # Configure logging from command-line arguments
-    if args.verbose:
-        log_level = logging.DEBUG
-    elif args.quiet:
-        log_level = logging.WARNING
+    # Configure logging from parameters
+    if verbose:
+        log_level_value = logging.DEBUG
+    elif quiet:
+        log_level_value = logging.WARNING
     else:
-        log_level = getattr(logging, args.log_level)
+        log_level_value = getattr(logging, log_level)
 
     # Setup logger
-    logger = setup_logger(level=log_level, log_file=args.log_file)
-    logger.debug("Command-line arguments parsed successfully")
+    logger = setup_logger(level=log_level_value, log_file=log_file)
+    logger.debug("Logging configured successfully")
 
-    # Generate experiment name
-    args.experiment_name = generate_experiment_name(args)
-    logger.info(f"Experiment name: {args.experiment_name}")
+    # Generate experiment name if not provided
+    if experiment_name is None:
+        import hashlib
+        from datetime import datetime
+
+        # Generate a name based on parameters and timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create parameter string
+        param_str = f"{nelx}x{nely}x{nelz}_vf{volfrac}_p{penal}_r{rmin}"
+        
+        # Generate a short hash of the parameters
+        param_hash = hashlib.md5(param_str.encode()).hexdigest()[:6]
+        
+        experiment_name = f"topo3d_{timestamp}_{param_hash}"
+    
+    logger.info(f"Experiment name: {experiment_name}")
 
     # Create a results manager for this experiment
     results_mgr = ResultsManager(
-        experiment_name=args.experiment_name, description=args.description
+        experiment_name=experiment_name, description=description
     )
     logger.debug(
         f"Results manager created with experiment directory: {results_mgr.experiment_dir}"
@@ -56,13 +94,35 @@ def setup_experiment(args) -> Tuple[logging.Logger, ResultsManager]:
 
 
 def execute_optimization(
-    args, logger, combined_obstacle_mask
+    nelx: int,
+    nely: int,
+    nelz: int,
+    volfrac: float,
+    penal: float,
+    rmin: float,
+    disp_thres: float,
+    tolx: float = 0.01,
+    maxloop: int = 2000,
+    create_animation: bool = False,
+    animation_frequency: int = 10,
+    logger: logging.Logger = None,
+    combined_obstacle_mask: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, Optional[Dict], float]:
     """
     Run the topology optimization process.
 
     Args:
-        args: Command-line arguments
+        nelx: Number of elements in x direction
+        nely: Number of elements in y direction
+        nelz: Number of elements in z direction
+        volfrac: Volume fraction constraint
+        penal: Penalization factor
+        rmin: Filter radius
+        disp_thres: Threshold for displaying elements
+        tolx: Convergence tolerance
+        maxloop: Maximum number of iterations
+        create_animation: Whether to save optimization history for animation
+        animation_frequency: Frequency of saving frames for animation
         logger: Configured logger
         combined_obstacle_mask: Combined obstacle and design space mask
 
@@ -70,63 +130,69 @@ def execute_optimization(
         Tuple containing optimization result, history (if saved), and runtime in seconds
     """
     # Run the optimization with timing
-    logger.info(
-        f"Starting optimization with {args.nelx}x{args.nely}x{args.nelz} elements..."
-    )
+    if logger:
+        logger.info(
+            f"Starting optimization with {nelx}x{nely}x{nelz} elements..."
+        )
     start_time = time.time()
-
-    # Get tolx and maxloop from args if available
-    tolx = getattr(args, "tolx", 0.01)  # Default to 0.01 if not provided
-    maxloop = getattr(args, "maxloop", 2000)  # Default to 2000 if not provided
-
-    # Check if creating animation is enabled
-    save_history = getattr(args, "create_animation", False)
-    history_frequency = getattr(args, "animation_frequency", 10)
 
     logger.debug(
         f"Optimization parameters: tolx={tolx}, maxloop={maxloop}, "
-        f"save_history={save_history}, history_frequency={history_frequency}"
+        f"save_history={create_animation}, history_frequency={animation_frequency}"
     )
 
     # Run the optimization with history if requested
     optimization_result = top3d(
-        args.nelx,
-        args.nely,
-        args.nelz,
-        args.volfrac,
-        args.penal,
-        args.rmin,
-        args.disp_thres,
+        nelx,
+        nely,
+        nelz,
+        volfrac,
+        penal,
+        rmin,
+        disp_thres,
         obstacle_mask=combined_obstacle_mask,
         tolx=tolx,
         maxloop=maxloop,
-        save_history=save_history,
-        history_frequency=history_frequency,
+        save_history=create_animation,
+        history_frequency=animation_frequency,
     )
 
     # Check if we got history back
     history = None
-    if save_history:
+    if create_animation:
         xPhys, history = optimization_result
-        logger.info(
-            f"Optimization history captured with {len(history['density_history'])} frames"
-        )
+        if logger:
+            logger.info(
+                f"Optimization history captured with {len(history['density_history'])} frames"
+            )
     else:
         xPhys = optimization_result
 
     end_time = time.time()
     run_time = end_time - start_time
-    logger.debug(f"Optimization finished in {run_time:.2f} seconds")
+    if logger:
+        logger.debug(f"Optimization finished in {run_time:.2f} seconds")
 
     return xPhys, history, run_time
 
 
-def export_result_to_stl(args, logger, results_mgr, result_path) -> bool:
+def export_result_to_stl(
+    export_stl: bool = False,
+    stl_level: float = 0.5,
+    smooth_stl: bool = False,
+    smooth_iterations: int = 3,
+    logger: logging.Logger = None,
+    results_mgr: ResultsManager = None,
+    result_path: str = None,
+) -> bool:
     """
     Export the optimization result as an STL file if requested.
 
     Args:
-        args: Command-line arguments
+        export_stl: Whether to export as STL
+        stl_level: Threshold level for STL export
+        smooth_stl: Whether to smooth the STL mesh
+        smooth_iterations: Number of smoothing iterations
         logger: Configured logger
         results_mgr: Results manager instance
         result_path: Path to the saved optimization result
@@ -134,7 +200,7 @@ def export_result_to_stl(args, logger, results_mgr, result_path) -> bool:
     Returns:
         True if STL export was successful, False otherwise
     """
-    if not getattr(args, "export_stl", False):
+    if not export_stl:
         return False
 
     try:
@@ -142,17 +208,20 @@ def export_result_to_stl(args, logger, results_mgr, result_path) -> bool:
         stl_filename = os.path.join(results_mgr.experiment_dir, "optimized_design.stl")
 
         # Export the result as an STL file
-        logger.info("Exporting optimization result as STL file...")
+        if logger:
+            logger.info("Exporting optimization result as STL file...")
         voxel_to_stl(
             input_file=result_path,
             output_file=stl_filename,
-            level=args.stl_level,
-            smooth_mesh=args.smooth_stl,
-            smooth_iterations=args.smooth_iterations,
+            level=stl_level,
+            smooth_mesh=smooth_stl,
+            smooth_iterations=smooth_iterations,
         )
-        logger.info(f"STL file exported to {stl_filename}")
+        if logger:
+            logger.info(f"STL file exported to {stl_filename}")
         return True
 
     except Exception as e:
-        logger.error(f"Error exporting STL file: {e}")
+        if logger:
+            logger.error(f"Error exporting STL file: {e}")
         return False

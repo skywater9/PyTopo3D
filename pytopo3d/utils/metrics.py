@@ -11,20 +11,50 @@ import numpy as np
 
 
 def collect_metrics(
-    args,
-    xPhys,
-    design_space_mask,
-    obstacle_mask,
-    combined_obstacle_mask,
-    run_time,
-    gif_path,
-    stl_exported,
+    nelx: int,
+    nely: int,
+    nelz: int,
+    volfrac: float,
+    penal: float,
+    rmin: float,
+    disp_thres: float,
+    tolx: float = 0.01,
+    maxloop: int = 2000,
+    design_space_stl: Optional[str] = None,
+    pitch: float = 1.0,
+    obstacle_config: Optional[str] = None,
+    animation_fps: int = 5,
+    stl_level: float = 0.5,
+    smooth_stl: bool = False,
+    smooth_iterations: int = 3,
+    xPhys: np.ndarray = None,
+    design_space_mask: np.ndarray = None,
+    obstacle_mask: np.ndarray = None,
+    combined_obstacle_mask: np.ndarray = None,
+    run_time: float = 0.0,
+    gif_path: Optional[str] = None,
+    stl_exported: bool = False,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
 
     Args:
-        args: Command-line arguments
+        nelx: Number of elements in x direction
+        nely: Number of elements in y direction
+        nelz: Number of elements in z direction
+        volfrac: Volume fraction constraint
+        penal: Penalization factor
+        rmin: Filter radius
+        disp_thres: Threshold for displaying elements
+        tolx: Convergence tolerance
+        maxloop: Maximum number of iterations
+        design_space_stl: Path to STL file for design space
+        pitch: Voxelization pitch for STL
+        obstacle_config: Path to obstacle configuration file
+        animation_fps: Frames per second for animation
+        stl_level: Threshold level for STL export
+        smooth_stl: Whether to smooth the STL mesh
+        smooth_iterations: Number of smoothing iterations
         xPhys: Optimized design
         design_space_mask: Design space mask
         obstacle_mask: Obstacle mask
@@ -38,43 +68,43 @@ def collect_metrics(
     """
     # Create metrics dictionary
     metrics = {
-        "nelx": args.nelx,
-        "nely": args.nely,
-        "nelz": args.nelz,
-        "volfrac": args.volfrac,
-        "penal": args.penal,
-        "rmin": args.rmin,
-        "disp_thres": args.disp_thres,
-        "tolx": getattr(args, "tolx", 0.01),
-        "maxloop": getattr(args, "maxloop", 2000),
+        "nelx": nelx,
+        "nely": nely,
+        "nelz": nelz,
+        "volfrac": volfrac,
+        "penal": penal,
+        "rmin": rmin,
+        "disp_thres": disp_thres,
+        "tolx": tolx,
+        "maxloop": maxloop,
         "runtime_seconds": run_time,
-        "has_obstacles": args.obstacle_config is not None,
+        "has_obstacles": obstacle_config is not None,
     }
 
     # Add obstacle info to metrics
-    if args.obstacle_config:
-        metrics["obstacle_config"] = args.obstacle_config
+    if obstacle_config:
+        metrics["obstacle_config"] = obstacle_config
         metrics["obstacle_elements"] = int(np.sum(obstacle_mask))
 
     # Add design space info to metrics
-    if hasattr(args, "design_space_stl") and args.design_space_stl:
-        metrics["design_space_stl"] = args.design_space_stl
+    if design_space_stl:
+        metrics["design_space_stl"] = design_space_stl
         metrics["design_space_elements"] = int(np.sum(design_space_mask))
         metrics["combined_restricted_elements"] = int(np.sum(combined_obstacle_mask))
-        metrics["pitch"] = args.pitch
+        metrics["pitch"] = pitch
 
     # Add animation metrics if available
     if gif_path:
         metrics["animation_created"] = True
         metrics["animation_path"] = gif_path
-        metrics["animation_fps"] = getattr(args, "animation_fps", 5)
+        metrics["animation_fps"] = animation_fps
 
     # Add STL export metrics
     if stl_exported:
         metrics["stl_exported"] = True
-        metrics["stl_level"] = args.stl_level
-        metrics["stl_smoothed"] = args.smooth_stl
-        metrics["stl_smooth_iterations"] = args.smooth_iterations
+        metrics["stl_level"] = stl_level
+        metrics["stl_smoothed"] = smooth_stl
+        metrics["stl_smooth_iterations"] = smooth_iterations
 
     return metrics
 
@@ -95,7 +125,7 @@ def calculate_compliance(xPhys, u, KE, penal) -> float:
     # This is a placeholder for the actual compliance calculation
     # In a real implementation, this would compute the compliance
     # based on the physical design and displacement
-    return 0.0  # Replace with actual calculation
+    return 0.0  # TODO: Replace with actual calculation
 
 
 def summarize_optimization_results(metrics: Dict[str, Any]) -> str:

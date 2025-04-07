@@ -6,6 +6,9 @@ This script provides a command-line interface to run the topology optimization.
 """
 
 import sys
+from typing import Any, Dict, Optional, Tuple
+
+import numpy as np
 
 from pytopo3d.cli.parser import parse_args
 from pytopo3d.preprocessing.geometry import load_geometry_data
@@ -31,21 +34,65 @@ def main():
 
     try:
         # Setup experiment, logging and results manager
-        logger, results_mgr = setup_experiment(args)
+        logger, results_mgr = setup_experiment(
+            verbose=args.verbose,
+            quiet=args.quiet,
+            log_level=args.log_level,
+            log_file=args.log_file,
+            experiment_name=getattr(args, "experiment_name", None),
+            description=args.description,
+            nelx=args.nelx,
+            nely=args.nely,
+            nelz=args.nelz,
+            volfrac=args.volfrac,
+            penal=args.penal,
+            rmin=args.rmin
+        )
+        
+        # Update args.experiment_name if it was generated in setup_experiment
+        if not hasattr(args, "experiment_name") or not args.experiment_name:
+            args.experiment_name = results_mgr.experiment_name
 
         # Load design space and obstacle data
         design_space_mask, obstacle_mask, combined_obstacle_mask = load_geometry_data(
-            args, logger, results_mgr
+            nelx=args.nelx,
+            nely=args.nely,
+            nelz=args.nelz,
+            design_space_stl=getattr(args, "design_space_stl", None),
+            pitch=getattr(args, "pitch", 1.0),
+            invert_design_space=getattr(args, "invert_design_space", False),
+            obstacle_config=getattr(args, "obstacle_config", None),
+            experiment_name=args.experiment_name,
+            logger=logger, 
+            results_mgr=results_mgr
         )
 
         # Create and save initial visualization
         loads_array, constraints_array, _ = visualize_initial_setup(
-            args, logger, results_mgr, combined_obstacle_mask
+            nelx=args.nelx,
+            nely=args.nely,
+            nelz=args.nelz,
+            experiment_name=args.experiment_name,
+            logger=logger, 
+            results_mgr=results_mgr, 
+            combined_obstacle_mask=combined_obstacle_mask
         )
 
         # Run the optimization
         xPhys, history, run_time = execute_optimization(
-            args, logger, combined_obstacle_mask
+            nelx=args.nelx,
+            nely=args.nely,
+            nelz=args.nelz,
+            volfrac=args.volfrac,
+            penal=args.penal,
+            rmin=args.rmin,
+            disp_thres=args.disp_thres,
+            tolx=getattr(args, "tolx", 0.01),
+            maxloop=getattr(args, "maxloop", 2000),
+            create_animation=getattr(args, "create_animation", False),
+            animation_frequency=getattr(args, "animation_frequency", 10),
+            logger=logger,
+            combined_obstacle_mask=combined_obstacle_mask
         )
 
         # Save the result to the experiment directory
@@ -54,41 +101,74 @@ def main():
 
         # Create visualization of the final result
         visualize_final_result(
-            args,
-            logger,
-            results_mgr,
-            xPhys,
-            combined_obstacle_mask,
-            loads_array,
-            constraints_array,
+            nelx=args.nelx,
+            nely=args.nely,
+            nelz=args.nelz,
+            experiment_name=args.experiment_name,
+            disp_thres=args.disp_thres,
+            logger=logger,
+            results_mgr=results_mgr,
+            xPhys=xPhys,
+            combined_obstacle_mask=combined_obstacle_mask,
+            loads_array=loads_array,
+            constraints_array=constraints_array,
         )
 
         # Create animation if history was captured
         gif_path = None
         if history:
             gif_path = create_optimization_animation(
-                args,
-                logger,
-                results_mgr,
-                history,
-                combined_obstacle_mask,
-                loads_array,
-                constraints_array,
+                nelx=args.nelx,
+                nely=args.nely,
+                nelz=args.nelz,
+                experiment_name=args.experiment_name,
+                disp_thres=args.disp_thres,
+                animation_frames=getattr(args, "animation_frames", 50),
+                animation_fps=getattr(args, "animation_fps", 5),
+                logger=logger,
+                results_mgr=results_mgr,
+                history=history,
+                combined_obstacle_mask=combined_obstacle_mask,
+                loads_array=loads_array,
+                constraints_array=constraints_array,
             )
 
         # Export result as STL if requested
-        stl_exported = export_result_to_stl(args, logger, results_mgr, result_path)
+        stl_exported = export_result_to_stl(
+            export_stl=getattr(args, "export_stl", False),
+            stl_level=getattr(args, "stl_level", 0.5),
+            smooth_stl=getattr(args, "smooth_stl", False),
+            smooth_iterations=getattr(args, "smooth_iterations", 3),
+            logger=logger, 
+            results_mgr=results_mgr, 
+            result_path=result_path
+        )
 
         # Collect and save metrics
         metrics = collect_metrics(
-            args,
-            xPhys,
-            design_space_mask,
-            obstacle_mask,
-            combined_obstacle_mask,
-            run_time,
-            gif_path,
-            stl_exported,
+            nelx=args.nelx,
+            nely=args.nely,
+            nelz=args.nelz,
+            volfrac=args.volfrac,
+            penal=args.penal,
+            rmin=args.rmin,
+            disp_thres=args.disp_thres,
+            tolx=getattr(args, "tolx", 0.01),
+            maxloop=getattr(args, "maxloop", 2000),
+            design_space_stl=getattr(args, "design_space_stl", None),
+            pitch=getattr(args, "pitch", 1.0),
+            obstacle_config=getattr(args, "obstacle_config", None),
+            animation_fps=getattr(args, "animation_fps", 5),
+            stl_level=getattr(args, "stl_level", 0.5),
+            smooth_stl=getattr(args, "smooth_stl", False),
+            smooth_iterations=getattr(args, "smooth_iterations", 3),
+            xPhys=xPhys,
+            design_space_mask=design_space_mask,
+            obstacle_mask=obstacle_mask,
+            combined_obstacle_mask=combined_obstacle_mask,
+            run_time=run_time,
+            gif_path=gif_path,
+            stl_exported=stl_exported,
         )
         results_mgr.update_metrics(metrics)
         logger.debug("Metrics updated")
