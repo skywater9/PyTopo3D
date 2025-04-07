@@ -9,7 +9,6 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
-from tqdm import tqdm
 
 from pytopo3d.core.compliance import element_compliance
 from pytopo3d.utils.assembly import build_edof, build_force_vector, build_supports
@@ -146,9 +145,6 @@ def top3d(
     logger.info(
         f"Starting optimization with tolerance {tolx} and max iterations {maxloop}"
     )
-    pbar = tqdm(
-        total=maxloop, desc="Optimizing", ncols=100
-    )  # Increased width for more info
 
     # Store initial state if saving history
     if save_history:
@@ -229,29 +225,16 @@ def top3d(
             history["iteration_history"].append(loop)
             history["compliance_history"].append(float(c))
 
-        # Log detailed iteration information at DEBUG level
-        logger.debug(
+        # Log detailed iteration information
+        logger.info(
             f"Iteration {loop}: Obj={c:.4f}, ΔObj={c_delta:.4f}, Vol={current_volume_fraction:.3f}, "
             f"change={change:.3f}, time={iter_time:.2f}s"
-        )
-
-        pbar.update(1)
-        pbar.set_postfix(
-            {
-                "Obj": f"{c:.4f}",
-                "ΔObj": f"{c_delta:.4e}",
-                "Vol": f"{current_volume_fraction:.3f}",
-                "change": f"{change:.3f}",
-            }
         )
 
         if displayflag:
             plt.clf()
             display_3D(xPhys, disp_thres)
             plt.pause(0.01)
-
-    # Close progress bar
-    pbar.close()
 
     # Log final results
     if loop >= maxloop:
