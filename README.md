@@ -42,6 +42,16 @@ This code performs 3D structural topology optimization using the SIMP (Solid Iso
 
 ## Installation
 
+You can install PyTopo3D in two ways:
+
+**Option 1: Install via pip**
+
+```bash
+pip install pytopo3d
+```
+
+**Option 2: Clone the repository**
+
 1. Clone this repository:
 ```bash
 git clone https://github.com/jihoonkim888/PyTopo3D.git
@@ -55,6 +65,11 @@ conda env create -f environment.yml
 
 # Activate the environment
 conda activate pytopo3d
+```
+
+3. For developers, install in development mode:
+```bash
+pip install -e .
 ```
 
 ## Basic Usage
