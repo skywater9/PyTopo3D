@@ -1,0 +1,20 @@
+include LICENSE
+include README.md
+include MANIFEST.in
+include environment.yml
+include pyproject.toml
+include setup.py
+
+recursive-include examples *
+recursive-include assets *
+
+recursive-exclude __pycache__ *
+recursive-exclude .git *
+recursive-exclude .venv *
+recursive-exclude results *
+recursive-exclude .cursor *
+recursive-exclude .pytest_cache *
+recursive-exclude *.egg-info *
+recursive-exclude *.eggs *
+recursive-exclude build *
+recursive-exclude dist * 

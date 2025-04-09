@@ -67,6 +67,11 @@ conda env create -f environment.yml
 conda activate pytopo3d
 ```
 
+3. For developers, install in development mode:
+```bash
+pip install -e .
+```
+
 ## Basic Usage
 
 ### Configuration Parameters

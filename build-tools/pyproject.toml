@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytopo3d"
+version = "0.1.0"
+description = "3D SIMP Topology Optimization Framework for Python"
+readme = "README.md"
+authors = [
+    {name = "Jihoon Kim", email = "jihoonkim888@example.com"},  # Replace with actual email
+    {name = "Namwoo Kang", email = "example@example.com"},      # Replace with actual email
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+keywords = ["topology optimization", "SIMP", "structural optimization", "3D", "finite element"]
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "scipy",
+    "scikit-image",
+    "networkx",
+    "pillow",
+    "plotly",
+    "tqdm",
+    "trimesh",
+    "psutil",
+    "pypardiso",
+]
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = [
+    "jupyter",
+    "jupyterlab",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/jihoonkim888/PyTopo3D"
+"Bug Tracker" = "https://github.com/jihoonkim888/PyTopo3D/issues"
+"Documentation" = "https://github.com/jihoonkim888/PyTopo3D"
+"Source Code" = "https://github.com/jihoonkim888/PyTopo3D" 

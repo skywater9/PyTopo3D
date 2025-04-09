@@ -5,12 +5,17 @@ Command-line argument parsing for the 3D topology optimization package.
 import argparse
 import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     """
     Parse command-line arguments for the topology optimization.
+
+    Parameters
+    ----------
+    args : Optional[List[str]], optional
+        Command line arguments, by default None (uses sys.argv[1:])
 
     Returns
     -------
@@ -174,7 +179,7 @@ def parse_args() -> argparse.Namespace:
         "--quiet", "-q", action="store_true", help="Suppress output (WARNING level)"
     )
 
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
 def generate_experiment_name(args: argparse.Namespace) -> str:
@@ -200,7 +205,7 @@ def generate_experiment_name(args: argparse.Namespace) -> str:
     obstacle_type = "no_obstacle"
     if args.obstacle_config:
         obstacle_type = os.path.basename(args.obstacle_config).replace(".json", "")
-    
+
     # Include design space STL info in experiment name if provided
     design_space = ""
     if hasattr(args, "design_space_stl") and args.design_space_stl:
