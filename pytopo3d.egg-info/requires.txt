@@ -1,0 +1,16 @@
+numpy
+pandas
+matplotlib
+scipy
+scikit-image
+networkx
+pillow
+plotly
+tqdm
+trimesh
+psutil
+pypardiso
+
+[dev]
+jupyter
+jupyterlab
