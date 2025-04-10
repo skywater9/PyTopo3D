@@ -29,6 +29,11 @@ A comprehensive Python implementation of 3D Topology Optimization based on SIMP 
       - [Command Line Options](#command-line-options)
   - [Acknowledgements](#acknowledgements)
   - [Citation](#citation)
+  - [Roadmap](#roadmap)
+    - [Version 0.2.0 (Performance \& Interface)](#version-020-performance--interface)
+    - [Version 0.3.0 (Core Functionality Improvements)](#version-030-core-functionality-improvements)
+    - [Version 0.4.0 (Pre-release Stabilization)](#version-040-pre-release-stabilization)
+    - [Version 1.0.0 (Stable Release)](#version-100-stable-release)
 
 ## Overview
 
@@ -317,7 +322,7 @@ Options:
 - `--log-file`: Path to a custom log file
 - `--verbose`: Enable more detailed output (sets log level to DEBUG)
 - `--quiet`: Reduce output verbosity (sets log level to WARNING)
-
+****
 ## Acknowledgements
 
 This code is adapted from [Liu & Tovar's MATLAB code](https://www.top3d.app/) for 3D topology optimization.
@@ -340,3 +345,27 @@ If you use PyTopo3D in your research or work, please cite our paper on ArXiv: [P
 ```
 
 This paper provides a detailed explanation of the implementation, theoretical foundations, and optimizations used in PyTopo3D. Proper citation helps support the continued development of open-source scientific software.
+
+## Roadmap
+
+Below is the roadmap for future releases of PyTopo3D:
+
+### Version 0.2.0 (Performance & Interface)
+- **GPU Acceleration**
+- **Interactive GUI**: Basic graphical user interface for parameter configuration and visualization (replacing current `matplotlib`-based visualization which slows down with high voxel counts)
+
+### Version 0.3.0 (Core Functionality Improvements)
+- **Optimization for Mass Minimization**
+- **Improved Convergence Methods**
+
+### Version 0.4.0 (Pre-release Stabilization)
+- **API Stabilization**: Finalize API design for 1.0 release
+- **Comprehensive Testing**: Extensive test suite for all components (probably with `pytest`)
+- **Performance Benchmarking**: Establish baseline performance metrics
+
+### Version 1.0.0 (Stable Release)
+- **Production-ready SIMP Implementation**: Stable, well-tested implementation of all core topology optimization features
+- **Complete Documentation**: Full documentation with tutorials and examples
+- **Verified Results**: Benchmark validation against established solutions
+
+*Note: Manufacturability and advanced physics features such as thermal analysis, fluid-structure interaction, and multi-physics optimization are being considered for future releases beyond the current roadmap.*
