@@ -7,7 +7,7 @@ results, boundary conditions, and creating animations.
 
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -20,11 +20,13 @@ def visualize_initial_setup(
     nelx: int,
     nely: int,
     nelz: int,
+    loads_array: np.ndarray,
+    constraints_array: np.ndarray,
     experiment_name: str,
     logger: Optional[logging.Logger] = None,
     results_mgr: Optional[ResultsManager] = None,
     combined_obstacle_mask: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, np.ndarray, str]:
+) -> str:
     """
     Create and save initial visualization showing boundary conditions and obstacles.
 
@@ -32,25 +34,24 @@ def visualize_initial_setup(
         nelx: Number of elements in x direction
         nely: Number of elements in y direction
         nelz: Number of elements in z direction
+        loads_array: Array showing load positions for visualization (nely, nelx, nelz)
+        constraints_array: Array showing constraint positions for visualization (nely, nelx, nelz)
         experiment_name: Name of the experiment
         logger: Configured logger
         results_mgr: Results manager instance
         combined_obstacle_mask: Combined obstacle and design space mask
 
     Returns:
-        Tuple containing loads array, constraints array, and path to visualization
+        Path to the saved visualization
     """
     # Create obstacle array for visualization
-    obstacle_array = combined_obstacle_mask.astype(float)
-
-    # Create boundary condition arrays for visualization
-    if logger:
-        logger.debug("Creating boundary condition arrays")
-    from pytopo3d.utils.boundary import create_boundary_arrays
-
-    loads_array, constraints_array = create_boundary_arrays(
-        nelx, nely, nelz
+    obstacle_array = (
+        combined_obstacle_mask.astype(float)
+        if combined_obstacle_mask is not None
+        else np.zeros((nely, nelx, nelz))
     )
+
+    # Boundary condition arrays are now passed directly
 
     # Save configuration if results_mgr is provided
     if results_mgr:
@@ -61,7 +62,7 @@ def visualize_initial_setup(
             "nelz": nelz,
             "experiment_name": experiment_name,
         }
-        
+
         results_mgr.save_config(config)
         if logger:
             logger.debug("Configuration saved")
@@ -69,6 +70,22 @@ def visualize_initial_setup(
     # Create visualization for boundary conditions, loads, constraints, and obstacle geometry
     if logger:
         logger.debug("Creating boundary condition visualization")
+
+    # Validate shapes
+    expected_shape = (nely, nelx, nelz)
+    if loads_array.shape != expected_shape:
+        raise ValueError(
+            f"loads_array shape mismatch: expected {expected_shape}, got {loads_array.shape}"
+        )
+    if constraints_array.shape != expected_shape:
+        raise ValueError(
+            f"constraints_array shape mismatch: expected {expected_shape}, got {constraints_array.shape}"
+        )
+    if obstacle_array.shape != expected_shape:
+        raise ValueError(
+            f"obstacle_array shape mismatch: expected {expected_shape}, got {obstacle_array.shape}"
+        )
+
     arrays_to_visualize = [obstacle_array, loads_array, constraints_array]
     thresholds = [0.5, 0.5, 0.5]
     colors = ["yellow", "blue", "red"]
@@ -89,7 +106,8 @@ def visualize_initial_setup(
     if logger:
         logger.info(f"Boundary conditions visualization saved to {boundary_viz_path}")
 
-    return loads_array, constraints_array, boundary_viz_path
+    # Return only the path, as loads/constraints are passed in
+    return boundary_viz_path
 
 
 def visualize_final_result(

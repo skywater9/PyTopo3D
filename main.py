@@ -6,9 +6,6 @@ This script provides a command-line interface to run the topology optimization.
 """
 
 import sys
-from typing import Any, Dict, Optional, Tuple
-
-import numpy as np
 
 from pytopo3d.cli.parser import parse_args
 from pytopo3d.preprocessing.geometry import load_geometry_data
@@ -17,6 +14,8 @@ from pytopo3d.runners.experiment import (
     export_result_to_stl,
     setup_experiment,
 )
+from pytopo3d.utils.assembly import build_force_vector, build_supports
+from pytopo3d.utils.boundary import create_bc_visualization_arrays
 from pytopo3d.utils.metrics import collect_metrics
 from pytopo3d.visualization.visualizer import (
     create_optimization_animation,
@@ -46,9 +45,9 @@ def main():
             nelz=args.nelz,
             volfrac=args.volfrac,
             penal=args.penal,
-            rmin=args.rmin
+            rmin=args.rmin,
         )
-        
+
         # Update args.experiment_name if it was generated in setup_experiment
         if not hasattr(args, "experiment_name") or not args.experiment_name:
             args.experiment_name = results_mgr.experiment_name
@@ -63,22 +62,47 @@ def main():
             invert_design_space=getattr(args, "invert_design_space", False),
             obstacle_config=getattr(args, "obstacle_config", None),
             experiment_name=args.experiment_name,
-            logger=logger, 
-            results_mgr=results_mgr
+            logger=logger,
+            results_mgr=results_mgr,
         )
 
+        # Determine number of DOFs
+        ndof = 3 * (args.nelx + 1) * (args.nely + 1) * (args.nelz + 1)
+
+        # --- Build Boundary Conditions ---
+        # TODO: Allow passing force_field and support_mask from args or config file
+        force_field = None  # Use default for now
+        support_mask = None  # Use default for now
+
+        logger.info("Building force vector (using default settings)")
+        F = build_force_vector(
+            args.nelx, args.nely, args.nelz, ndof, force_field=force_field
+        )
+        logger.info("Building support constraints (using default settings)")
+        freedofs0, fixeddof0 = build_supports(
+            args.nelx, args.nely, args.nelz, ndof, support_mask=support_mask
+        )
+
+        # Create visualization arrays from actual BCs
+        loads_array, constraints_array = create_bc_visualization_arrays(
+            args.nelx, args.nely, args.nelz, ndof, F, fixeddof0
+        )
+        logger.info("Generated boundary condition visualization arrays")
+
         # Create and save initial visualization
-        loads_array, constraints_array, _ = visualize_initial_setup(
+        visualize_initial_setup(
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
+            loads_array=loads_array,
+            constraints_array=constraints_array,
             experiment_name=args.experiment_name,
-            logger=logger, 
-            results_mgr=results_mgr, 
-            combined_obstacle_mask=combined_obstacle_mask
+            logger=logger,
+            results_mgr=results_mgr,
+            combined_obstacle_mask=combined_obstacle_mask,
         )
 
-        # Run the optimization
+        # Run the optimization - Passing force_field and support_mask
         xPhys, history, run_time = execute_optimization(
             nelx=args.nelx,
             nely=args.nely,
@@ -87,12 +111,16 @@ def main():
             penal=args.penal,
             rmin=args.rmin,
             disp_thres=args.disp_thres,
+            # Pass the variables (currently None for defaults)
+            force_field=force_field,
+            support_mask=support_mask,
+            # Removed F, freedofs0, fixeddof0
             tolx=getattr(args, "tolx", 0.01),
             maxloop=getattr(args, "maxloop", 2000),
             create_animation=getattr(args, "create_animation", False),
             animation_frequency=getattr(args, "animation_frequency", 10),
             logger=logger,
-            combined_obstacle_mask=combined_obstacle_mask
+            combined_obstacle_mask=combined_obstacle_mask,
         )
 
         # Save the result to the experiment directory
@@ -139,9 +167,9 @@ def main():
             stl_level=getattr(args, "stl_level", 0.5),
             smooth_stl=getattr(args, "smooth_stl", False),
             smooth_iterations=getattr(args, "smooth_iterations", 3),
-            logger=logger, 
-            results_mgr=results_mgr, 
-            result_path=result_path
+            logger=logger,
+            results_mgr=results_mgr,
+            result_path=result_path,
         )
 
         # Collect and save metrics

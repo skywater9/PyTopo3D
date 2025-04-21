@@ -7,11 +7,10 @@ This module contains functions for setting up and managing topology optimization
 import logging
 import os
 import time
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from pytopo3d.cli.parser import generate_experiment_name
 from pytopo3d.core.optimizer import top3d
 from pytopo3d.utils.export import voxel_to_stl
 from pytopo3d.utils.logger import setup_logger
@@ -28,9 +27,9 @@ def setup_experiment(
     nelx: int = 40,
     nely: int = 20,
     nelz: int = 10,
-    volfrac: float = 0.3, 
+    volfrac: float = 0.3,
     penal: float = 3.0,
-    rmin: float = 1.5
+    rmin: float = 1.5,
 ) -> Tuple[logging.Logger, ResultsManager]:
     """
     Set up experiment name, logging, and results manager.
@@ -71,15 +70,15 @@ def setup_experiment(
 
         # Generate a name based on parameters and timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+
         # Create parameter string
         param_str = f"{nelx}x{nely}x{nelz}_vf{volfrac}_p{penal}_r{rmin}"
-        
+
         # Generate a short hash of the parameters
         param_hash = hashlib.md5(param_str.encode()).hexdigest()[:6]
-        
+
         experiment_name = f"topo3d_{timestamp}_{param_hash}"
-    
+
     logger.info(f"Experiment name: {experiment_name}")
 
     # Create a results manager for this experiment
@@ -101,6 +100,8 @@ def execute_optimization(
     penal: float,
     rmin: float,
     disp_thres: float,
+    force_field: Optional[np.ndarray] = None,
+    support_mask: Optional[np.ndarray] = None,
     tolx: float = 0.01,
     maxloop: int = 2000,
     create_animation: bool = False,
@@ -119,6 +120,8 @@ def execute_optimization(
         penal: Penalization factor
         rmin: Filter radius
         disp_thres: Threshold for displaying elements
+        force_field: Optional force field array (nely, nelx, nelz, 3)
+        support_mask: Optional support mask array (nely, nelx, nelz)
         tolx: Convergence tolerance
         maxloop: Maximum number of iterations
         create_animation: Whether to save optimization history for animation
@@ -131,15 +134,24 @@ def execute_optimization(
     """
     # Run the optimization with timing
     if logger:
-        logger.info(
-            f"Starting optimization with {nelx}x{nely}x{nelz} elements..."
-        )
+        logger.info(f"Starting optimization with {nelx}x{nely}x{nelz} elements...")
     start_time = time.time()
 
+    # Determine ndof needed for logging/debug (though top3d calculates it internally)
+    ndof = 3 * (nelx + 1) * (nely + 1) * (nelz + 1)
     logger.debug(
         f"Optimization parameters: tolx={tolx}, maxloop={maxloop}, "
-        f"save_history={create_animation}, history_frequency={animation_frequency}"
+        f"save_history={create_animation}, history_frequency={animation_frequency}, "
+        f"ndof={ndof}"
     )
+    if force_field is not None:
+        logger.debug(f"Using provided force_field with shape {force_field.shape}")
+    else:
+        logger.debug("Using default force settings")
+    if support_mask is not None:
+        logger.debug(f"Using provided support_mask with shape {support_mask.shape}")
+    else:
+        logger.debug("Using default support settings")
 
     # Run the optimization with history if requested
     optimization_result = top3d(
@@ -150,6 +162,8 @@ def execute_optimization(
         penal,
         rmin,
         disp_thres,
+        force_field=force_field,
+        support_mask=support_mask,
         obstacle_mask=combined_obstacle_mask,
         tolx=tolx,
         maxloop=maxloop,

@@ -8,12 +8,14 @@ using the optimality criteria method.
 import numpy as np
 
 
-def optimality_criteria_update(x, dc, dv, volfrac, H, Hs, nele, obstacle_mask, design_nele):
+def optimality_criteria_update(
+    x, dc, dv, volfrac, H, Hs, nele, obstacle_mask, design_nele
+):
     """
     Performs the optimality criteria (OC) update with bisection on the Lagrange
     multiplier. The volume constraint is enforced only on the design domain
     (excluding obstacle elements).
-    
+
     Parameters
     ----------
     x : ndarray
@@ -34,13 +36,13 @@ def optimality_criteria_update(x, dc, dv, volfrac, H, Hs, nele, obstacle_mask, d
         Mask indicating obstacle elements.
     design_nele : int
         Number of elements in design domain (not obstacles).
-        
+
     Returns
     -------
     tuple
         (updated design variables, maximum change)
     """
-    l1, l2 = 0.0, 1e9
+    l1, l2 = 1e-9, 1e9
     move = 0.2
     xnew = x.copy()
 

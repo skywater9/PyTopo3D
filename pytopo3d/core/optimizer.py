@@ -32,6 +32,8 @@ def top3d(
     rmin,
     disp_thres,
     obstacle_mask=None,
+    force_field=None,
+    support_mask=None,
     tolx: float = 0.01,
     maxloop: int = 2000,
     save_history: bool = False,
@@ -57,6 +59,13 @@ def top3d(
         If provided, wherever obstacle_mask==True, we force the density to 0
         (no material can occupy those cells). They are excluded from the
         volume constraint.
+    force_field : ndarray, shape (nely, nelx, nelz, 3), optional
+        Vector field specifying forces. Each voxel has a [Fx, Fy, Fz] vector.
+        Non-zero values indicate forces to apply at that location.
+        If None, uses default forces on right face in -y direction.
+    support_mask : ndarray, shape (nely, nelx, nelz), optional
+        Boolean mask indicating where supports are applied.
+        If None, uses default left-face support placement.
     tolx : float, optional
         Convergence tolerance for optimization. The algorithm stops when the
         maximum change in design variables is less than this value. Default is 0.01.
@@ -105,8 +114,8 @@ def top3d(
     # ---------------------------
     # Build force vector & supports
     logger.debug("Building force vector and supports")
-    F = build_force_vector(nelx, nely, nelz, ndof)
-    freedofs0, fixeddof0 = build_supports(nelx, nely, nelz, ndof)
+    F = build_force_vector(nelx, nely, nelz, ndof, force_field)
+    freedofs0, fixeddof0 = build_supports(nelx, nely, nelz, ndof, support_mask)
     U = np.zeros(ndof)
 
     # ---------------------------
@@ -197,6 +206,13 @@ def top3d(
         # Force zero sensitivities in obstacle region, so they remain at x=0.
         dc[obstacle_mask] = 0.0
         dv[obstacle_mask] = 0.0
+
+        # Add epsilon for numerical stability before passing to OC update
+        dv += 1e-9 # Avoid division by zero/small numbers
+
+        # Log sensitivity stats before OC update
+        logger.debug(f"Iter {loop} Pre-OC: dc min/max/mean = {dc.min():.4e}/{dc.max():.4e}/{dc.mean():.4e}")
+        logger.debug(f"Iter {loop} Pre-OC: dv min/max/mean = {dv.min():.4e}/{dv.max():.4e}/{dv.mean():.4e}")
 
         # 6) Optimality Criteria update via bisection
         xnew, change = optimality_criteria_update(
