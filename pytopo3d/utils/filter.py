@@ -133,11 +133,11 @@ def build_filter(
 
 def apply_filter(
     H: Union[sp.csr_matrix, "cusp.csr_matrix"],
-    x: np.ndarray,
-    Hs: np.ndarray,
+    x: Union[np.ndarray, "cp.ndarray"],
+    Hs: Union[np.ndarray, "cp.ndarray"],
     shape: Tuple[int, int, int],
     use_gpu: bool = False,
-) -> np.ndarray:
+) -> Union[np.ndarray, "cp.ndarray"]:
     """
     Apply density filter to an array (either on CPU or GPU).
 
@@ -145,9 +145,9 @@ def apply_filter(
     ----------
     H : scipy.sparse.csr_matrix or cupyx.scipy.sparse.csr_matrix
         Filter matrix
-    x : ndarray
+    x : ndarray or cupy.ndarray
         Density array to filter (3D array)
-    Hs : ndarray
+    Hs : ndarray or cupy.ndarray
         Row sums for normalization
     shape : tuple(int, int, int)
         Shape of the 3D array (nely, nelx, nelz)
@@ -156,36 +156,64 @@ def apply_filter(
 
     Returns
     -------
-    ndarray
-        Filtered density array with the same shape as input
+    ndarray or cupy.ndarray
+        Filtered density array with the same shape as input, returns same type as input
     """
     nely, nelx, nelz = shape
-
-    if use_gpu and HAS_CUPY:
-        # Transfer data to GPU
+    
+    # Check if inputs are already on GPU
+    input_on_gpu = HAS_CUPY and (
+        isinstance(x, cp.ndarray) or 
+        isinstance(H, cusp.csr_matrix) or 
+        isinstance(Hs, cp.ndarray)
+    )
+    
+    # Determine whether to use GPU based on inputs and use_gpu flag
+    use_gpu_for_calc = use_gpu and HAS_CUPY or input_on_gpu
+    
+    if use_gpu_for_calc:
+        # Transfer data to GPU if not already there
         if not isinstance(H, cusp.csr_matrix):
-            H_gpu = cusp.csr_matrix(
-                (cp.asarray(H.data), cp.asarray(H.indices), cp.asarray(H.indptr)),
-                shape=H.shape,
-            )
+            H_gpu = cusp.csr_matrix((cp.asarray(H.data), 
+                                    cp.asarray(H.indices), 
+                                    cp.asarray(H.indptr)),
+                                   shape=H.shape)
         else:
             H_gpu = H
-
-        x_flat_gpu = cp.asarray(x.ravel(order="F"))
-        Hs_gpu = cp.asarray(Hs)
-
+            
+        if not isinstance(x, cp.ndarray):
+            x_flat_gpu = cp.asarray(x.ravel(order='F'))
+        else:
+            x_flat_gpu = x.ravel(order='F')
+            
+        if not isinstance(Hs, cp.ndarray):
+            Hs_gpu = cp.asarray(Hs)
+        else:
+            Hs_gpu = Hs
+        
         # Perform filtering on GPU
         filtered_flat_gpu = H_gpu @ x_flat_gpu / Hs_gpu
-
-        # Transfer result back to CPU and reshape
-        filtered_flat = cp.asnumpy(filtered_flat_gpu)
-        filtered = filtered_flat.reshape(shape, order="F")
-        return filtered
+        
+        # Only return to CPU if input was from CPU and we're not enforcing GPU output
+        should_return_to_cpu = not isinstance(x, cp.ndarray) and not use_gpu
+        
+        if should_return_to_cpu:
+            filtered_flat = cp.asnumpy(filtered_flat_gpu)
+            filtered = filtered_flat.reshape(shape, order='F')
+            return filtered
+        else:
+            # Keep on GPU
+            filtered_gpu = filtered_flat_gpu.reshape(shape, order='F')
+            return filtered_gpu
     else:
         # CPU version
-        x_flat = x.ravel(order="F")
+        if isinstance(x, cp.ndarray):
+            x_flat = cp.asnumpy(x).ravel(order='F')
+        else:
+            x_flat = x.ravel(order='F')
+            
         filtered_flat = H @ x_flat / Hs
-        filtered = filtered_flat.reshape(shape, order="F")
+        filtered = filtered_flat.reshape(shape, order='F')
         return filtered
 
 
