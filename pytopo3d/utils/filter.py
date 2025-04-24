@@ -4,7 +4,7 @@ Filter utilities for 3D topology optimization.
 This module contains functions for building spatial density filters.
 """
 
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import scipy.sparse as sp
@@ -14,7 +14,19 @@ from scipy.spatial import cKDTree  # Import cKDTree
 FLOAT_EPSILON = 1e-9  # Small epsilon for robust float comparisons
 DIST_EPSILON = 1e-12  # Small epsilon to avoid sqrt of zero
 
-def build_filter(nelx: int, nely: int, nelz: int, rmin: float) -> Tuple[sp.csr_matrix, np.ndarray]:
+# Check if CuPy is available for GPU acceleration
+try:
+    import cupy as cp
+    import cupyx.scipy.sparse as cusp
+
+    HAS_CUPY = True
+except ImportError:
+    HAS_CUPY = False
+
+
+def build_filter(
+    nelx: int, nely: int, nelz: int, rmin: float
+) -> Tuple[sp.csr_matrix, np.ndarray]:
     """
     Build the density filter matrix using KD-tree for neighbor search
     but replicating the original integer-based distance calculation for accuracy.
@@ -39,7 +51,9 @@ def build_filter(nelx: int, nely: int, nelz: int, rmin: float) -> Tuple[sp.csr_m
     z_coords = np.arange(nelz) + 0.5
     # Use 'ij' indexing consistent with element index calculation (k changes fastest)
     zz, xx, yy = np.meshgrid(z_coords, x_coords, y_coords, indexing="ij")
-    centers = np.vstack((xx.ravel(order="F"), yy.ravel(order="F"), zz.ravel(order="F"))).T
+    centers = np.vstack(
+        (xx.ravel(order="F"), yy.ravel(order="F"), zz.ravel(order="F"))
+    ).T
 
     # 2. Build KD-Tree to find potential neighbors efficiently
     tree = cKDTree(centers)
@@ -76,16 +90,24 @@ def build_filter(nelx: int, nely: int, nelz: int, rmin: float) -> Tuple[sp.csr_m
         j2_neighbors = j1_all[potential_neighbors]
 
         # Calculate distances using original integer-based formula
-        dist_sq = (i1 - i2_neighbors)**2 + (j1 - j2_neighbors)**2 + (k1 - k2_neighbors)**2
+        dist_sq = (
+            (i1 - i2_neighbors) ** 2
+            + (j1 - j2_neighbors) ** 2
+            + (k1 - k2_neighbors) ** 2
+        )
         # Avoid sqrt of zero if e1 == e2
-        dist = np.sqrt(np.maximum(dist_sq, DIST_EPSILON)) # Add tiny epsilon before sqrt
+        dist = np.sqrt(
+            np.maximum(dist_sq, DIST_EPSILON)
+        )  # Add tiny epsilon before sqrt
 
         # Calculate filter weights (linear decay)
         weights = rmin - dist
 
         # Filter using the original threshold condition (val > 0.0)
-        valid_mask = weights > FLOAT_EPSILON # Use small epsilon for float comparison robustness
-        
+        valid_mask = (
+            weights > FLOAT_EPSILON
+        )  # Use small epsilon for float comparison robustness
+
         # Get the actual neighbors (e2 indices) and their weights
         valid_e2_indices = np.array(potential_neighbors)[valid_mask]
         valid_weights = weights[valid_mask]
@@ -104,9 +126,68 @@ def build_filter(nelx: int, nely: int, nelz: int, rmin: float) -> Tuple[sp.csr_m
     # 5. Calculate row sums Hs for normalization
     Hs = np.array(H.sum(axis=1)).flatten()
     # Handle cases where Hs might be zero (e.g., isolated elements with rmin=0)
-    Hs[Hs == 0] = 1.0 
+    Hs[Hs == 0] = 1.0
 
     return H, Hs
+
+
+def apply_filter(
+    H: Union[sp.csr_matrix, "cusp.csr_matrix"],
+    x: np.ndarray,
+    Hs: np.ndarray,
+    shape: Tuple[int, int, int],
+    use_gpu: bool = False,
+) -> np.ndarray:
+    """
+    Apply density filter to an array (either on CPU or GPU).
+
+    Parameters
+    ----------
+    H : scipy.sparse.csr_matrix or cupyx.scipy.sparse.csr_matrix
+        Filter matrix
+    x : ndarray
+        Density array to filter (3D array)
+    Hs : ndarray
+        Row sums for normalization
+    shape : tuple(int, int, int)
+        Shape of the 3D array (nely, nelx, nelz)
+    use_gpu : bool
+        Whether to use GPU acceleration if available
+
+    Returns
+    -------
+    ndarray
+        Filtered density array with the same shape as input
+    """
+    nely, nelx, nelz = shape
+
+    if use_gpu and HAS_CUPY:
+        # Transfer data to GPU
+        if not isinstance(H, cusp.csr_matrix):
+            H_gpu = cusp.csr_matrix(
+                (cp.asarray(H.data), cp.asarray(H.indices), cp.asarray(H.indptr)),
+                shape=H.shape,
+            )
+        else:
+            H_gpu = H
+
+        x_flat_gpu = cp.asarray(x.ravel(order="F"))
+        Hs_gpu = cp.asarray(Hs)
+
+        # Perform filtering on GPU
+        filtered_flat_gpu = H_gpu @ x_flat_gpu / Hs_gpu
+
+        # Transfer result back to CPU and reshape
+        filtered_flat = cp.asnumpy(filtered_flat_gpu)
+        filtered = filtered_flat.reshape(shape, order="F")
+        return filtered
+    else:
+        # CPU version
+        x_flat = x.ravel(order="F")
+        filtered_flat = H @ x_flat / Hs
+        filtered = filtered_flat.reshape(shape, order="F")
+        return filtered
+
 
 # -------- Original Slow Implementation (for reference) --------
 # def build_filter_slow(nelx, nely, nelz, rmin):

@@ -108,6 +108,7 @@ def execute_optimization(
     animation_frequency: int = 10,
     logger: logging.Logger = None,
     combined_obstacle_mask: Optional[np.ndarray] = None,
+    use_gpu: bool = False,
 ) -> Tuple[np.ndarray, Optional[Dict], float]:
     """
     Run the topology optimization process.
@@ -128,6 +129,7 @@ def execute_optimization(
         animation_frequency: Frequency of saving frames for animation
         logger: Configured logger
         combined_obstacle_mask: Combined obstacle and design space mask
+        use_gpu: Whether to use GPU acceleration if available
 
     Returns:
         Tuple containing optimization result, history (if saved), and runtime in seconds
@@ -142,7 +144,7 @@ def execute_optimization(
     logger.debug(
         f"Optimization parameters: tolx={tolx}, maxloop={maxloop}, "
         f"save_history={create_animation}, history_frequency={animation_frequency}, "
-        f"ndof={ndof}"
+        f"ndof={ndof}, use_gpu={use_gpu}"
     )
     if force_field is not None:
         logger.debug(f"Using provided force_field with shape {force_field.shape}")
@@ -169,6 +171,7 @@ def execute_optimization(
         maxloop=maxloop,
         save_history=create_animation,
         history_frequency=animation_frequency,
+        use_gpu=use_gpu,
     )
 
     # Check if we got history back

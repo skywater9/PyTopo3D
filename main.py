@@ -121,6 +121,7 @@ def main():
             animation_frequency=getattr(args, "animation_frequency", 10),
             logger=logger,
             combined_obstacle_mask=combined_obstacle_mask,
+            use_gpu=args.gpu,
         )
 
         # Save the result to the experiment directory

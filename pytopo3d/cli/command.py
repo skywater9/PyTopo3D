@@ -103,6 +103,7 @@ def main(args: Optional[List[str]] = None) -> int:
             animation_frequency=getattr(parsed_args, "animation_frequency", 10),
             logger=logger,
             combined_obstacle_mask=combined_obstacle_mask,
+            use_gpu=parsed_args.gpu,
         )
 
         # Save the result to the experiment directory

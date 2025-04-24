@@ -5,6 +5,7 @@ This module contains the main top3d function that performs the optimization.
 """
 
 import time
+from typing import Any, Dict, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,33 +13,41 @@ import scipy.sparse as sp
 
 from pytopo3d.core.compliance import element_compliance
 from pytopo3d.utils.assembly import build_edof, build_force_vector, build_supports
-from pytopo3d.utils.filter import build_filter
+from pytopo3d.utils.filter import HAS_CUPY, apply_filter, build_filter
 from pytopo3d.utils.logger import get_logger
 from pytopo3d.utils.oc_update import optimality_criteria_update
-from pytopo3d.utils.solver import solver, solver_name
+from pytopo3d.utils.solver import get_solver
 from pytopo3d.utils.stiffness import lk_H8
 from pytopo3d.visualization.display import display_3D
 
 # Create a module-specific logger
 logger = get_logger(__name__)
 
+# Try to import CuPy if available
+if HAS_CUPY:
+    import cupy as cp
+    import cupyx.scipy.sparse as cusp
+
+    logger.info("CuPy is available for GPU acceleration")
+
 
 def top3d(
-    nelx,
-    nely,
-    nelz,
-    volfrac,
-    penal,
-    rmin,
-    disp_thres,
-    obstacle_mask=None,
-    force_field=None,
-    support_mask=None,
+    nelx: int,
+    nely: int,
+    nelz: int,
+    volfrac: float,
+    penal: float,
+    rmin: float,
+    disp_thres: float,
+    obstacle_mask: Optional[np.ndarray] = None,
+    force_field: Optional[np.ndarray] = None,
+    support_mask: Optional[np.ndarray] = None,
     tolx: float = 0.01,
     maxloop: int = 2000,
     save_history: bool = False,
     history_frequency: int = 10,
-):
+    use_gpu: bool = False,
+) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, Any]]]:
     """
     Accelerated 3D Topology Optimization with optional obstacle region.
 
@@ -75,6 +84,8 @@ def top3d(
         Whether to save the optimization history for creating animations. Default is False.
     history_frequency : int, optional
         How often to save the density array to the history (every N iterations). Default is 10.
+    use_gpu : bool, optional
+        Whether to use GPU acceleration if available. Default is True.
 
     Returns
     -------
@@ -83,6 +94,15 @@ def top3d(
         If save_history is True, returns a tuple (xPhys, history_dict) where history_dict
         contains intermediate results for creating animations.
     """
+    # Check if GPU should be used and is available
+    gpu_available = HAS_CUPY and use_gpu
+
+    if use_gpu and not HAS_CUPY:
+        logger.warning(
+            "GPU acceleration requested but CuPy is not available. Using CPU."
+        )
+    elif gpu_available:
+        logger.info("Using GPU acceleration with CuPy")
 
     # ---------------------------
     # USER-DEFINED PARAMETERS
@@ -135,6 +155,17 @@ def top3d(
     logger.debug(f"Building filter with radius {rmin}")
     H, Hs = build_filter(nelx, nely, nelz, rmin)
 
+    # Transfer filter to GPU if using GPU acceleration
+    if gpu_available:
+        H_gpu = cusp.csr_matrix(
+            (cp.asarray(H.data), cp.asarray(H.indices), cp.asarray(H.indptr)),
+            shape=H.shape,
+        )
+        Hs_gpu = cp.asarray(Hs)
+    else:
+        H_gpu = None
+        Hs_gpu = None
+
     # ---------------------------
     # INITIALIZE design variable
     # Start with uniform distribution = volfrac in the *design domain*.
@@ -142,14 +173,20 @@ def top3d(
     x = np.full((nely, nelx, nelz), volfrac)
     # Force obstacle elements to 0 from the start:
     x[obstacle_mask] = 0.0
-    # Apply filter
-    xPhys = (H * x.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
+
+    # Apply filter - use GPU if available
+    if gpu_available:
+        xPhys = apply_filter(H_gpu, x, Hs_gpu, (nely, nelx, nelz), use_gpu=True)
+    else:
+        xPhys = (H * x.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
 
     loop = 0
     change = 1.0
     # Initialize previous objective value for delta tracking
     c_prev = float("inf")
 
+    # Get the appropriate solver based on user preference
+    solver_func, solver_name = get_solver(use_gpu)
     logger.info(f"Using solver: {solver_name}")
     logger.info(
         f"Starting optimization with tolerance {tolx} and max iterations {maxloop}"
@@ -171,7 +208,15 @@ def top3d(
 
         # 1) Assemble stiffness values for each element
         xFlat = xPhys.ravel(order="F")  # length = nele
-        stiff_vals = Emin + (xFlat**penal) * (E0 - Emin)  # shape (nele,)
+
+        # Compute stiffness values - can be done on GPU if available
+        if gpu_available:
+            xFlat_gpu = cp.asarray(xFlat)
+            stiff_vals_gpu = Emin + (xFlat_gpu**penal) * (E0 - Emin)
+            stiff_vals = cp.asnumpy(stiff_vals_gpu)
+        else:
+            stiff_vals = Emin + (xFlat**penal) * (E0 - Emin)  # shape (nele,)
+
         # Each element => 576 values; sK_full has shape (576*nele,)
         sK_full = np.kron(stiff_vals, KE.ravel())
 
@@ -183,47 +228,92 @@ def top3d(
         # 3) Extract submatrix for free DOFs and solve
         K_ff = K[freedofs0, :][:, freedofs0]
         F_f = F[freedofs0]
-        U_f = solver(K_ff, F_f)
+
+        # The solver function now automatically handles GPU acceleration if available
+        U_f = solver_func(K_ff, F_f)
         U[:] = 0.0
         U[freedofs0] = U_f
 
         # 4) Compute compliance and sensitivities
         ce_flat = element_compliance(U, edofMat, KE)  # shape (nele,)
         ce = ce_flat.reshape(nely, nelx, nelz, order="F")
-        c = ((Emin + xPhys**penal * (E0 - Emin)) * ce).sum()
+
+        # Compute objective (compliance) - can use GPU for this computation
+        if gpu_available:
+            xPhys_gpu = cp.asarray(xPhys)
+            ce_gpu = cp.asarray(ce)
+            c_term_gpu = (Emin + xPhys_gpu**penal * (E0 - Emin)) * ce_gpu
+            c = float(cp.sum(c_term_gpu))
+        else:
+            c = ((Emin + xPhys**penal * (E0 - Emin)) * ce).sum()
 
         # Calculate delta of objective function
         c_delta = c - c_prev
         c_prev = c
 
-        dc = -penal * (E0 - Emin) * xPhys ** (penal - 1) * ce
-        dv = np.ones_like(xPhys)
+        # Calculate sensitivities - can use GPU
+        if gpu_available:
+            dc_gpu = -penal * (E0 - Emin) * xPhys_gpu ** (penal - 1) * ce_gpu
+            dv_gpu = cp.ones_like(xPhys_gpu)
 
-        # 5) Filter sensitivities
-        dc = (H * (dc.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
-        dv = (H * (dv.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
+            # 5) Filter sensitivities on GPU
+            dc_flat_gpu = dc_gpu.ravel(order="F") / Hs_gpu
+            dv_flat_gpu = dv_gpu.ravel(order="F") / Hs_gpu
+
+            dc_filtered_flat_gpu = H_gpu @ dc_flat_gpu
+            dv_filtered_flat_gpu = H_gpu @ dv_flat_gpu
+
+            dc = cp.asnumpy(dc_filtered_flat_gpu).reshape((nely, nelx, nelz), order="F")
+            dv = cp.asnumpy(dv_filtered_flat_gpu).reshape((nely, nelx, nelz), order="F")
+        else:
+            # CPU version
+            dc = -penal * (E0 - Emin) * xPhys ** (penal - 1) * ce
+            dv = np.ones_like(xPhys)
+
+            # 5) Filter sensitivities
+            dc = (H * (dc.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
+            dv = (H * (dv.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
 
         # Force zero sensitivities in obstacle region, so they remain at x=0.
         dc[obstacle_mask] = 0.0
         dv[obstacle_mask] = 0.0
 
         # Add epsilon for numerical stability before passing to OC update
-        dv += 1e-9 # Avoid division by zero/small numbers
+        dv += 1e-9  # Avoid division by zero/small numbers
 
         # Log sensitivity stats before OC update
-        logger.debug(f"Iter {loop} Pre-OC: dc min/max/mean = {dc.min():.4e}/{dc.max():.4e}/{dc.mean():.4e}")
-        logger.debug(f"Iter {loop} Pre-OC: dv min/max/mean = {dv.min():.4e}/{dv.max():.4e}/{dv.mean():.4e}")
+        logger.debug(
+            f"Iter {loop} Pre-OC: dc min/max/mean = {dc.min():.4e}/{dc.max():.4e}/{dc.mean():.4e}"
+        )
+        logger.debug(
+            f"Iter {loop} Pre-OC: dv min/max/mean = {dv.min():.4e}/{dv.max():.4e}/{dv.mean():.4e}"
+        )
 
         # 6) Optimality Criteria update via bisection
         xnew, change = optimality_criteria_update(
-            x, dc, dv, volfrac, H, Hs, nele, obstacle_mask, design_nele
+            x,
+            dc,
+            dv,
+            volfrac,
+            H,
+            Hs,
+            nele,
+            obstacle_mask,
+            design_nele,
+            use_gpu=gpu_available,
         )
 
         # Force obstacle region to remain zero
         xnew[obstacle_mask] = 0.0
 
-        # Recompute physical densities
-        xPhys = (H * xnew.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
+        # Recompute physical densities using optimized filter application
+        if gpu_available:
+            xPhys = apply_filter(H_gpu, xnew, Hs_gpu, (nely, nelx, nelz), use_gpu=True)
+        else:
+            xPhys = (H * xnew.ravel(order="F") / Hs).reshape(
+                (nely, nelx, nelz), order="F"
+            )
+
         xPhys[obstacle_mask] = 0.0
 
         x = xnew
