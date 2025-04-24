@@ -8,12 +8,11 @@ GPU/CPU solver factory.
 
 from __future__ import annotations
 
-import os
 from typing import Callable, Dict, Tuple, Union
 
 import numpy as np
-from scipy.sparse.linalg import cg as cg_cpu, LinearOperator, spsolve as seq_solve
 from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import spsolve as seq_solve
 
 # ───────────────────────────────────────────────────────────────────── CPU
 solvers: Dict[str, Callable] = {
@@ -35,11 +34,15 @@ try:
     import cupy as cp
     import cupyx.scipy.sparse as cusp
     from cupyx.scipy.sparse.linalg import (
-        cg as cg_gpu,
         LinearOperator as LinearOperatorGPU,
     )
+    from cupyx.scipy.sparse.linalg import (
+        cg as cg_gpu,
+    )
 
-    def _gpu_cg_solver(A: Union[cusp.csr_matrix, csr_matrix], b: Union[cp.ndarray, np.ndarray]):
+    def _gpu_cg_solver(
+        A: Union[cusp.csr_matrix, csr_matrix], b: Union[cp.ndarray, np.ndarray]
+    ):
         """Symmetric CG with Jacobi preconditioner."""
         if isinstance(A, csr_matrix):  # 히든 복사 방지
             A = cusp.csr_matrix(A)
@@ -50,7 +53,7 @@ try:
         diag_M = 1.0 / (A.diagonal() + 1e-20)  # Jacobi
         M = LinearOperatorGPU(A.shape, matvec=lambda x: diag_M * x)
 
-        x, info = cg_gpu(A, b, M=M, maxiter=1000, atol=1e-10, tol=1e-8)
+        x, info = cg_gpu(A, b, M=M, maxiter=2000, atol=0.0, tol=1e-6)
         if info != 0:
             raise RuntimeError(f"CG failed to converge: info={info}")
         return x
