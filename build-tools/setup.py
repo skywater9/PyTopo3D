@@ -42,6 +42,9 @@ setup(
             "jupyter",
             "jupyterlab",
         ],
+        "gpu": [
+            "cupy-cuda12x",  # Replace with appropriate CUDA version as needed
+        ],
     },
     include_package_data=True,
 )

@@ -25,6 +25,9 @@ A comprehensive Python implementation of 3D Topology Optimization based on SIMP 
     - [Exporting Results](#exporting-results)
       - [Command Line Usage](#command-line-usage-2)
     - [Animation Generation](#animation-generation)
+    - [GPU Acceleration](#gpu-acceleration)
+      - [Installation with GPU Support](#installation-with-gpu-support)
+      - [Enabling GPU Acceleration](#enabling-gpu-acceleration)
     - [Experiment Management](#experiment-management)
       - [Command Line Options](#command-line-options)
   - [Acknowledgements](#acknowledgements)
@@ -52,7 +55,11 @@ You can install PyTopo3D in two ways:
 **Option 1: Install via pip**
 
 ```bash
+# Basic installation
 pip install pytopo3d
+
+# With GPU acceleration support
+pip install pytopo3d[gpu]
 ```
 
 **Option 2: Clone the repository**
@@ -74,7 +81,13 @@ conda activate pytopo3d
 
 3. For developers, install in development mode:
 ```bash
+# Basic installation
+cd build-tools
+
 pip install -e .
+
+# With GPU acceleration support
+pip install -e ".[gpu]"
 ```
 
 ## Basic Usage
@@ -296,6 +309,54 @@ Options:
 - `--animation-frames`: Target number of frames in the final animation (default: 50)
 - `--animation-fps`: Frames per second in the generated animation (default: 5)
 
+### GPU Acceleration
+
+PyTopo3D supports GPU acceleration using NVIDIA CUDA GPUs via the CuPy library. This can significantly speed up the optimization process, especially for large models.
+
+#### Installation with GPU Support
+
+To use GPU acceleration, install PyTopo3D with GPU support:
+
+```bash
+# Via pip
+pip install pytopo3d[gpu]
+
+# For development installation
+cd build-tools
+
+pip install -e ".[gpu]"
+```
+
+This will install the required `cupy` dependency. Make sure to use the appropriate CUDA version that matches your system (e.g., `cupy-cuda11x` for CUDA 11.x, `cupy-cuda12x` for CUDA 12.x).
+
+#### Enabling GPU Acceleration
+
+By default, GPU acceleration is disabled even if a compatible GPU is available in your system. You can enable it in two ways:
+
+1. **Command Line Interface**:
+   ```bash
+   python main.py --gpu --nelx 64 --nely 32 --nelz 32 [other options]
+   ```
+
+2. **Python API**:
+   ```python
+   from pytopo3d.core.optimizer import top3d
+   
+   # Enable GPU acceleration with the use_gpu parameter
+   result = top3d(
+       nelx=64, 
+       nely=32, 
+       nelz=32, 
+       volfrac=0.3, 
+       penal=3.0, 
+       rmin=3.0, 
+       disp_thres=0.5,
+       use_gpu=True  # Set to True to enable GPU acceleration
+   )
+   ```
+
+GPU acceleration primarily impacts the linear solver step (the most computationally intensive part) and sensitivity filtering operations.
+
 ### Experiment Management
 
 PyTopo3D includes a robust experiment management system that automatically:
@@ -322,7 +383,7 @@ Options:
 - `--log-file`: Path to a custom log file
 - `--verbose`: Enable more detailed output (sets log level to DEBUG)
 - `--quiet`: Reduce output verbosity (sets log level to WARNING)
-****
+
 ## Acknowledgements
 
 This code is adapted from [Liu & Tovar's MATLAB code](https://www.top3d.app/) for 3D topology optimization.
@@ -351,7 +412,7 @@ This paper provides a detailed explanation of the implementation, theoretical fo
 Below is the roadmap for future releases of PyTopo3D:
 
 ### Version 0.2.0 (Performance & Interface)
-- **GPU Acceleration**
+- ✅ **GPU Acceleration**: CUDA acceleration via CuPy for faster optimization on NVIDIA GPUs
 - **Interactive GUI**: Basic graphical user interface for parameter configuration and visualization (replacing current `matplotlib`-based visualization which slows down with high voxel counts)
 
 ### Version 0.3.0 (Core Functionality Improvements)
