@@ -20,6 +20,7 @@ class Arrow3D(FancyArrowPatch):
     """
     A 3D arrow for use in matplotlib 3D plots.
     """
+
     def __init__(self, xs, ys, zs, *args, **kwargs):
         super().__init__((0, 0), (0, 0), *args, **kwargs)
         self._verts3d = xs, ys, zs
@@ -35,7 +36,7 @@ def _add_axis_legend(ax, fig):
     """
     Add axis direction indicators as a separate legend/annotation in the corner
     of the figure rather than on the plot itself.
-    
+
     Parameters
     ----------
     ax : Axes3D
@@ -45,45 +46,84 @@ def _add_axis_legend(ax, fig):
     """
     # Create a small axis for the legend in the bottom right corner
     # Use a smaller area and position it to not interfere with the title
-    legend_ax = fig.add_axes([0.75, 0.05, 0.2, 0.2], projection='3d')
-    
+    legend_ax = fig.add_axes([0.75, 0.05, 0.2, 0.2], projection="3d")
+
     # Create short arrows for X, Y, Z with equal length
     # Start from origin point
     origin = np.array([0, 0, 0])
-    
+
     # Create arrows for each axis with same length
     arrow_length = 0.8
-    
+
     # X-axis (Red)
-    x_arrow = Arrow3D([0, arrow_length], [0, 0], [0, 0], 
-                      mutation_scale=15, lw=2, arrowstyle='-|>', color='red')
+    x_arrow = Arrow3D(
+        [0, arrow_length],
+        [0, 0],
+        [0, 0],
+        mutation_scale=15,
+        lw=2,
+        arrowstyle="-|>",
+        color="red",
+    )
     legend_ax.add_artist(x_arrow)
-    legend_ax.text(arrow_length + 0.1, 0, 0, "X", color='red', fontsize=12, fontweight='bold')
-    
-    # Z-axis (Blue) - Swapped with Y
-    z_arrow = Arrow3D([0, 0], [0, arrow_length], [0, 0], 
-                      mutation_scale=15, lw=2, arrowstyle='-|>', color='blue')
-    legend_ax.add_artist(z_arrow)
-    legend_ax.text(0, arrow_length + 0.1, 0, "Z", color='blue', fontsize=12, fontweight='bold')
-    
-    # Y-axis (Green) - Swapped with Z
-    y_arrow = Arrow3D([0, 0], [0, 0], [0, arrow_length], 
-                      mutation_scale=15, lw=2, arrowstyle='-|>', color='green')
+    legend_ax.text(
+        arrow_length + 0.1, 0, 0, "X", color="red", fontsize=12, fontweight="bold"
+    )
+
+    # Y-axis (Green)
+    y_arrow = Arrow3D(
+        [0, 0],
+        [0, arrow_length],  # Points along Y
+        [0, 0],
+        mutation_scale=15,
+        lw=2,
+        arrowstyle="-|>",
+        color="green",
+    )
     legend_ax.add_artist(y_arrow)
-    legend_ax.text(0, 0, arrow_length + 0.1, "Y", color='green', fontsize=12, fontweight='bold')
-    
+    legend_ax.text(
+        0,
+        arrow_length + 0.1,
+        0,
+        "Y",
+        color="green",
+        fontsize=12,
+        fontweight="bold",  # Label at Y end
+    )
+
+    # Z-axis (Blue)
+    z_arrow = Arrow3D(
+        [0, 0],
+        [0, 0],
+        [0, arrow_length],  # Points along Z
+        mutation_scale=15,
+        lw=2,
+        arrowstyle="-|>",
+        color="blue",
+    )
+    legend_ax.add_artist(z_arrow)
+    legend_ax.text(
+        0,
+        0,
+        arrow_length + 0.1,
+        "Z",
+        color="blue",
+        fontsize=12,
+        fontweight="bold",  # Label at Z end
+    )
+
     # Set axis limits and view angle for the legend
     legend_ax.set_xlim([-0.2, 1.2])
     legend_ax.set_ylim([-0.2, 1.2])
     legend_ax.set_zlim([-0.2, 1.2])
-    
+
     # Use the same view angle as the main plot
     elev, azim = ax.elev, ax.azim
     legend_ax.view_init(elev=elev, azim=azim)
-    
+
     # Hide spines, ticks, and labels
     legend_ax.set_axis_off()
-    
+
     return legend_ax
 
 
@@ -188,11 +228,12 @@ def display_3D(
         color_maps.append(cmap)
 
     fig = plt.gcf()
-    
+
     # Make the main axes slightly smaller to accommodate the axis legend
     # without affecting the title position
     ax = fig.add_subplot(111, projection="3d")
-    ax.set_box_aspect((nelx, nelz, nely))
+    # Update box aspect to match X, Y, Z
+    ax.set_box_aspect((nelx, nely, nelz))
 
     faces = np.array(
         [
@@ -227,9 +268,9 @@ def display_3D(
 
     # For each voxel, determine which array has the highest normalized density
     # and use that array's color
-    for k in range(nelz):
-        for i in range(nelx):
-            for j in range(nely):
+    for k in range(nelz):  # Loop over Z
+        for i in range(nelx):  # Loop over X
+            for j in range(nely):  # Loop over Y
                 # Check if any of the arrays has density > threshold
                 display_voxel = False
                 array_idx = -1
@@ -247,9 +288,10 @@ def display_3D(
                             display_voxel = True
 
                 if display_voxel:
+                    # Map array indices (i, j, k) directly to plot coordinates (x, y, z)
                     base_x = i
-                    base_y = k
-                    base_z = nely - 1 - j
+                    base_y = j  # Plot Y uses array Y (j)
+                    base_z = k  # Plot Z uses array Z (k)
                     verts_global = local_verts + [base_x, base_y, base_z]
                     for f in faces:
                         poly_verts = verts_global[f].tolist()
@@ -282,18 +324,19 @@ def display_3D(
     )
 
     ax.add_collection3d(pc)
+    # Update axis limits to match X, Y, Z
     ax.set_xlim(0, nelx)
-    ax.set_ylim(0, nelz)  # Y is now depth (z)
-    ax.set_zlim(0, nely)  # Z is now height (y)
+    ax.set_ylim(0, nely)  # Y limit is nely
+    ax.set_zlim(0, nelz)  # Z limit is nelz
 
     # Set appropriate axis labels
     ax.set_xlabel("X")
-    ax.set_ylabel("Y (Depth)")
-    ax.set_zlabel("Z (Height)")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
 
-    # Isometric view
+    # Isometric view (can be adjusted)
     ax.view_init(elev=30, azim=30)
-    
+
     # Add color legend patches with custom gradient swatches
     legend_elements = []
 
@@ -319,7 +362,7 @@ def display_3D(
 
     # Add axis direction indicators as a legend AFTER other elements
     _add_axis_legend(ax, fig)
-    
+
     plt.axis("off")
 
     return fig

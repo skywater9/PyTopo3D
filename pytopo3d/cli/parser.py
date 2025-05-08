@@ -64,6 +64,15 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Maximum number of iterations",
     )
 
+    # Performance parameters
+    performance_group = parser.add_argument_group("Performance parameters")
+    performance_group.add_argument(
+        "--gpu",
+        action="store_true",
+        default=False,
+        help="Enable GPU acceleration when available (requires CuPy)",
+    )
+
     # Output parameters
     output_group = parser.add_argument_group("Output parameters")
     output_group.add_argument(

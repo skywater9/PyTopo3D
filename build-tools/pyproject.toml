@@ -42,6 +42,9 @@ dev = [
     "jupyter",
     "jupyterlab",
 ]
+gpu = [
+    "cupy-cuda12x",  # Replace with appropriate CUDA version as needed
+]
 
 [project.urls]
 "Homepage" = "https://github.com/jihoonkim888/PyTopo3D"

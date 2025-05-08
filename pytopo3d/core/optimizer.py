@@ -1,256 +1,273 @@
 """
-Main optimizer for 3D topology optimization.
+Main optimizer for 3-D topology optimization – fixed CSR scatter version
+(24 April 2025).
 
-This module contains the main top3d function that performs the optimization.
+Changes relative to the previous refactor
+-----------------------------------------
+* Keep the 576 × nele COO coordinates (with duplicates) **and** build a
+  mapping `dup2uniq` → CSR.data so we can scatter-add each iteration.
+* Still reuse the CSR structure – no allocation inside the loop.
+* Compatible with the CG + Jacobi GPU solver provided in solver.py.
 """
 
-import time
+from __future__ import annotations
 
-import matplotlib.pyplot as plt
+import time
+from typing import Any, Dict, Optional, Tuple, Union
+
 import numpy as np
 import scipy.sparse as sp
+import matplotlib.pyplot as plt
 
 from pytopo3d.core.compliance import element_compliance
 from pytopo3d.utils.assembly import build_edof, build_force_vector, build_supports
-from pytopo3d.utils.filter import build_filter
+from pytopo3d.utils.filter import HAS_CUPY, apply_filter, build_filter
 from pytopo3d.utils.logger import get_logger
 from pytopo3d.utils.oc_update import optimality_criteria_update
-from pytopo3d.utils.solver import solver, solver_name
+from pytopo3d.utils.solver import get_solver
 from pytopo3d.utils.stiffness import lk_H8
 from pytopo3d.visualization.display import display_3D
 
-# Create a module-specific logger
 logger = get_logger(__name__)
 
+if HAS_CUPY:
+    import cupy as cp
+    import cupyx.scipy.sparse as cusp
+    logger.info("CuPy is available for GPU acceleration")
 
+
+# ──────────────────────────────────────────────────────────────────────────
+def _make_scatter_map(i_full, j_full, ndof):
+    """Memory– and speed-optimised scatter map builder."""
+    linear = i_full.astype(np.int64) * ndof + j_full        # 1-D key
+    uniq_lin, dup2uniq = np.unique(linear, return_inverse=True)
+    i_uniq = uniq_lin // ndof
+    j_uniq = uniq_lin % ndof
+    return i_uniq, j_uniq, dup2uniq
+
+
+# ──────────────────────────────────────────────────────────────────────────
 def top3d(
-    nelx,
-    nely,
-    nelz,
-    volfrac,
-    penal,
-    rmin,
-    disp_thres,
-    obstacle_mask=None,
+    nelx: int,
+    nely: int,
+    nelz: int,
+    volfrac: float,
+    penal: float,
+    rmin: float,
+    disp_thres: float,
+    obstacle_mask: Optional[np.ndarray] = None,
+    force_field: Optional[np.ndarray] = None,
+    support_mask: Optional[np.ndarray] = None,
     tolx: float = 0.01,
     maxloop: int = 2000,
     save_history: bool = False,
     history_frequency: int = 10,
-):
-    """
-    Accelerated 3D Topology Optimization with optional obstacle region.
+    use_gpu: bool = False,
+) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, Any]]]:
+    # ─────────────────────── setup
+    gpu = HAS_CUPY and use_gpu
+    if use_gpu and not HAS_CUPY:
+        logger.warning("GPU requested, but CuPy not found – falling back to CPU.")
+    elif gpu:
+        logger.info("Using GPU acceleration with CuPy.")
 
-    Parameters
-    ----------
-    nelx, nely, nelz : int
-        Number of elements in x, y, z directions.
-    volfrac : float
-        Volume fraction target for the design domain (excludes obstacles).
-    penal : float
-        Penalization exponent for SIMP.
-    rmin : float
-        Filter radius (for sensitivity filtering).
-    disp_thres : float
-        Display threshold for 3D visualization. Elements with density >
-        disp_thres are plotted.
-    obstacle_mask : ndarray of bool, shape (nely, nelx, nelz), optional
-        If provided, wherever obstacle_mask==True, we force the density to 0
-        (no material can occupy those cells). They are excluded from the
-        volume constraint.
-    tolx : float, optional
-        Convergence tolerance for optimization. The algorithm stops when the
-        maximum change in design variables is less than this value. Default is 0.01.
-    maxloop : int, optional
-        Maximum number of optimization iterations. Default is 2000.
-    save_history : bool, optional
-        Whether to save the optimization history for creating animations. Default is False.
-    history_frequency : int, optional
-        How often to save the density array to the history (every N iterations). Default is 10.
-
-    Returns
-    -------
-    ndarray or tuple
-        If save_history is False, returns the optimized physical density array.
-        If save_history is True, returns a tuple (xPhys, history_dict) where history_dict
-        contains intermediate results for creating animations.
-    """
-
-    # ---------------------------
-    # USER-DEFINED PARAMETERS
-    displayflag = False  # Only final display by default
-
-    E0 = 1.0
-    Emin = 1e-9
-    nu = 0.3
-
+    E0, Emin, nu = 1.0, 1e-9, 0.3
     nele = nelx * nely * nelz
     ndof = 3 * (nelx + 1) * (nely + 1) * (nelz + 1)
 
-    # If no obstacle mask is provided, make it all False
-    # (meaning no obstacle anywhere).
-    if obstacle_mask is None:
-        obstacle_mask = np.zeros((nely, nelx, nelz), dtype=bool)
+    obstacle_mask = (
+        np.zeros((nely, nelx, nelz), dtype=bool)
+        if obstacle_mask is None
+        else obstacle_mask
+    )
+    design_nele = nele - obstacle_mask.sum()
+    logger.debug(f"design elements: {design_nele}/{nele}")
 
-    # Number of "free" design elements (excluded obstacles)
-    design_nele = nele - np.count_nonzero(obstacle_mask)
-    logger.debug(f"Design elements: {design_nele}/{nele} ({design_nele / nele:.1%})")
-
-    # Initialize history dictionary if saving history
+    # History dict
     history = (
         {"density_history": [], "iteration_history": [], "compliance_history": []}
         if save_history
         else None
     )
 
-    # ---------------------------
-    # Build force vector & supports
-    logger.debug("Building force vector and supports")
-    F = build_force_vector(nelx, nely, nelz, ndof)
-    freedofs0, fixeddof0 = build_supports(nelx, nely, nelz, ndof)
-    U = np.zeros(ndof)
+    # Force / supports
+    F = build_force_vector(nelx, nely, nelz, ndof, force_field)
+    freedofs0, _ = build_supports(nelx, nely, nelz, ndof, support_mask)
 
-    # ---------------------------
-    # Element stiffness matrix (24x24)
-    logger.debug("Computing element stiffness matrix")
+    # Element stiffness
     KE = lk_H8(nu)
-
-    # ---------------------------
-    # Build edofMat, and global indexing arrays iK, jK
-    logger.debug("Building element DOF matrix and indexing arrays")
     edofMat, iK, jK = build_edof(nelx, nely, nelz)
-    # Convert to 0-based indices for sparse matrix construction (do this once)
     iK0, jK0 = iK - 1, jK - 1
 
-    # ---------------------------
-    # Build filter matrix H (once) and Hs
-    logger.debug(f"Building filter with radius {rmin}")
+    # Solver
+    solver_func, solver_name = get_solver(use_gpu)
+    logger.info(f"Linear solver: {solver_name}")
+
+    # GPU transfers
+    if gpu:
+        KE_gpu = cp.asarray(KE)
+        iK0_gpu, jK0_gpu = cp.asarray(iK0), cp.asarray(jK0)
+        F_gpu = cp.asarray(F)
+        freedofs0_gpu = cp.asarray(freedofs0)
+        obstacle_gpu = cp.asarray(obstacle_mask)
+        U_gpu = cp.zeros(ndof)
+
+    # Filter
     H, Hs = build_filter(nelx, nely, nelz, rmin)
-
-    # ---------------------------
-    # INITIALIZE design variable
-    # Start with uniform distribution = volfrac in the *design domain*.
-    logger.debug(f"Initializing design with volume fraction {volfrac}")
-    x = np.full((nely, nelx, nelz), volfrac)
-    # Force obstacle elements to 0 from the start:
-    x[obstacle_mask] = 0.0
-    # Apply filter
-    xPhys = (H * x.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
-
-    loop = 0
-    change = 1.0
-    # Initialize previous objective value for delta tracking
-    c_prev = float("inf")
-
-    logger.info(f"Using solver: {solver_name}")
-    logger.info(
-        f"Starting optimization with tolerance {tolx} and max iterations {maxloop}"
-    )
-
-    # Store initial state if saving history
-    if save_history:
-        history["density_history"].append(xPhys.copy())
-        history["iteration_history"].append(0)
-        history["compliance_history"].append(
-            0.0
-        )  # placeholder, will be updated after first iteration
-
-    # ---------------------------
-    # START ITERATION
-    while change > tolx and loop < maxloop:
-        loop += 1
-        t_start = time.time()
-
-        # 1) Assemble stiffness values for each element
-        xFlat = xPhys.ravel(order="F")  # length = nele
-        stiff_vals = Emin + (xFlat**penal) * (E0 - Emin)  # shape (nele,)
-        # Each element => 576 values; sK_full has shape (576*nele,)
-        sK_full = np.kron(stiff_vals, KE.ravel())
-
-        # 2) Assemble global stiffness matrix using COO format
-        # The COO format automatically sums values for duplicate (i,j) entries during construction,
-        # ensuring that elements with shared DOFs properly contribute to the global stiffness matrix
-        K = sp.csr_matrix((sK_full, (iK0, jK0)), shape=(ndof, ndof))
-
-        # 3) Extract submatrix for free DOFs and solve
-        K_ff = K[freedofs0, :][:, freedofs0]
-        F_f = F[freedofs0]
-        U_f = solver(K_ff, F_f)
-        U[:] = 0.0
-        U[freedofs0] = U_f
-
-        # 4) Compute compliance and sensitivities
-        ce_flat = element_compliance(U, edofMat, KE)  # shape (nele,)
-        ce = ce_flat.reshape(nely, nelx, nelz, order="F")
-        c = ((Emin + xPhys**penal * (E0 - Emin)) * ce).sum()
-
-        # Calculate delta of objective function
-        c_delta = c - c_prev
-        c_prev = c
-
-        dc = -penal * (E0 - Emin) * xPhys ** (penal - 1) * ce
-        dv = np.ones_like(xPhys)
-
-        # 5) Filter sensitivities
-        dc = (H * (dc.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
-        dv = (H * (dv.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
-
-        # Force zero sensitivities in obstacle region, so they remain at x=0.
-        dc[obstacle_mask] = 0.0
-        dv[obstacle_mask] = 0.0
-
-        # 6) Optimality Criteria update via bisection
-        xnew, change = optimality_criteria_update(
-            x, dc, dv, volfrac, H, Hs, nele, obstacle_mask, design_nele
+    if gpu:
+        H_gpu = cusp.csr_matrix(
+            (cp.asarray(H.data), cp.asarray(H.indices), cp.asarray(H.indptr)),
+            shape=H.shape,
         )
+        Hs_gpu = cp.asarray(Hs)
 
-        # Force obstacle region to remain zero
-        xnew[obstacle_mask] = 0.0
-
-        # Recompute physical densities
-        xPhys = (H * xnew.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
+    # Initial design
+    if gpu:
+        x_gpu = cp.full((nely, nelx, nelz), volfrac)
+        x_gpu[obstacle_gpu] = 0.0
+        xPhys_gpu = apply_filter(H_gpu, x_gpu, Hs_gpu, x_gpu.shape, use_gpu=True)
+        xPhys_gpu[obstacle_gpu] = 0.0
+    else:
+        x = np.full((nely, nelx, nelz), volfrac)
+        x[obstacle_mask] = 0.0
+        xPhys = (H * x.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
         xPhys[obstacle_mask] = 0.0
 
-        x = xnew
+    # ─────────────────────── sparsity pattern + scatter map
+    logger.debug("Building global stiffness pattern & scatter map")
+    i_unique, j_unique, dup2uniq = _make_scatter_map(iK0, jK0, ndof)
 
-        iter_time = time.time() - t_start
-
-        # Compute the volume fraction only over the design domain
-        current_volume_fraction = xPhys[~obstacle_mask].mean()
-
-        # Save history at specified frequency if requested
-        if save_history and (
-            loop % history_frequency == 0 or loop == 1 or change <= tolx
-        ):
-            history["density_history"].append(xPhys.copy())
-            history["iteration_history"].append(loop)
-            history["compliance_history"].append(float(c))
-
-        # Log detailed iteration information
-        logger.info(
-            f"Iteration {loop}: Obj={c:.4f}, ΔObj={c_delta:.4f}, Vol={current_volume_fraction:.3f}, "
-            f"change={change:.3f}, time={iter_time:.2f}s"
-        )
-
-        if displayflag:
-            plt.clf()
-            display_3D(xPhys, disp_thres)
-            plt.pause(0.01)
-
-    # Log final results
-    if loop >= maxloop:
-        logger.warning(
-            f"Optimization reached maximum iterations ({maxloop}) without converging"
+    if gpu:
+        dup2uniq_gpu = cp.asarray(dup2uniq)
+        K_gpu = cusp.csr_matrix(
+            (cp.zeros(len(i_unique)), (cp.asarray(i_unique), cp.asarray(j_unique))),
+            shape=(ndof, ndof),
         )
     else:
-        logger.info(f"Optimization converged in {loop} iterations")
+        K = sp.csr_matrix((np.zeros(len(i_unique)), (i_unique, j_unique)), shape=(ndof, ndof))
 
-    logger.info(f"Final objective value: {c:.6f}")
-    logger.info(
-        f"Final volume fraction: {current_volume_fraction:.6f} (target: {volfrac:.6f})"
-    )
-
-    # Return the optimized density and history if requested
+    # ─────────────────────── main loop
+    loop, change, c_prev = 0, 1.0, np.inf
     if save_history:
-        return xPhys, history
-    else:
-        return xPhys
+        history_frequency = max(history_frequency, 500)
+        if gpu:
+            history["density_history"].append(cp.asnumpy(xPhys_gpu))
+        else:
+            history["density_history"].append(xPhys.copy())
+        history["iteration_history"].append(0)
+        history["compliance_history"].append(0.0)
+
+    while change > tolx and loop < maxloop:
+        loop += 1
+        t0 = time.time()
+
+        # ================================================= GPU
+        if gpu:
+            # Element-wise stiffness coefficients
+            stiff_gpu = Emin + (xPhys_gpu.ravel(order="F") ** penal) * (E0 - Emin)
+            elem_vals_gpu = cp.kron(stiff_gpu, KE_gpu.ravel())  # 576×nele
+
+            # Scatter-add into CSR.data
+            K_gpu.data.fill(0.0)
+            cp.add.at(K_gpu.data, dup2uniq_gpu, elem_vals_gpu)
+
+            # Solve
+            Kff_gpu = K_gpu[freedofs0_gpu, :][:, freedofs0_gpu]
+            Uf_gpu = solver_func(Kff_gpu, F_gpu[freedofs0_gpu])
+            U_gpu.fill(0)
+            U_gpu[freedofs0_gpu] = Uf_gpu
+
+            # Compliance & sensitivities
+            ce_flat_gpu = element_compliance(U_gpu, cp.asarray(edofMat), KE_gpu)
+            ce_gpu = ce_flat_gpu.reshape(nely, nelx, nelz, order="F")
+            c = cp.sum((Emin + xPhys_gpu ** penal * (E0 - Emin)) * ce_gpu).item()
+
+            dc_gpu = -penal * (E0 - Emin) * xPhys_gpu ** (penal - 1) * ce_gpu
+            dv_gpu = cp.ones_like(xPhys_gpu)
+
+            dc_gpu = apply_filter(H_gpu, dc_gpu, Hs_gpu, xPhys_gpu.shape, use_gpu=True)
+            dv_gpu = apply_filter(H_gpu, dv_gpu, Hs_gpu, xPhys_gpu.shape, use_gpu=True)
+            dc_gpu[obstacle_gpu] = dv_gpu[obstacle_gpu] = 0.0
+            dv_gpu += 1e-9
+
+            xnew_gpu, change = optimality_criteria_update(
+                x_gpu,
+                dc_gpu,
+                dv_gpu,
+                volfrac,
+                H_gpu,
+                Hs_gpu,
+                nele,
+                obstacle_gpu,
+                design_nele,
+                use_gpu=True,
+            )
+            xnew_gpu[obstacle_gpu] = 0.0
+            xPhys_gpu = apply_filter(H_gpu, xnew_gpu, Hs_gpu, xnew_gpu.shape, use_gpu=True)
+            xPhys_gpu[obstacle_gpu] = 0.0
+            x_gpu = xnew_gpu
+            current_vol = cp.mean(xPhys_gpu[~obstacle_gpu]).item()
+
+        # ================================================= CPU
+        else:
+            stiff = Emin + (xPhys.ravel(order="F") ** penal) * (E0 - Emin)
+            elem_vals = np.kron(stiff, KE.ravel())
+            K.data[:] = 0.0
+            np.add.at(K.data, dup2uniq, elem_vals)
+
+            Kff = K[freedofs0, :][:, freedofs0]
+            Uf = solver_func(Kff, F[freedofs0])
+            U = np.zeros(ndof)
+            U[freedofs0] = Uf
+
+            ce_flat = element_compliance(U, edofMat, KE)
+            ce = ce_flat.reshape(nely, nelx, nelz, order="F")
+            c = ((Emin + xPhys ** penal * (E0 - Emin)) * ce).sum()
+
+            dc = -penal * (E0 - Emin) * xPhys ** (penal - 1) * ce
+            dv = np.ones_like(xPhys)
+            dc = (H * (dc.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
+            dv = (H * (dv.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
+            dc[obstacle_mask] = dv[obstacle_mask] = 0.0
+            dv += 1e-9
+
+            xnew, change = optimality_criteria_update(
+                x,
+                dc,
+                dv,
+                volfrac,
+                H,
+                Hs,
+                nele,
+                obstacle_mask,
+                design_nele,
+                use_gpu=False,
+            )
+            xnew[obstacle_mask] = 0.0
+            xPhys = (H * xnew.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
+            xPhys[obstacle_mask] = 0.0
+            x = xnew
+            current_vol = xPhys[~obstacle_mask].mean()
+
+        # ------------------------------------------------ logging / history
+        c_delta, c_prev = c - c_prev, c
+        iter_t = time.time() - t0
+
+        if save_history and (loop % history_frequency == 0 or change <= tolx):
+            history["density_history"].append(
+                cp.asnumpy(xPhys_gpu) if gpu else xPhys.copy()
+            )
+            history["iteration_history"].append(loop)
+            history["compliance_history"].append(c)
+
+        logger.info(
+            f"Iter {loop:4d}: Obj={c:9.4f}, ΔObj={c_delta:9.4f}, "
+            f"Vol={current_vol:6.3f}, change={change:6.3f}, "
+            f"time={iter_t:5.2f}s"
+        )
+
+    # ─────────────────────── final output
+    final_xPhys = cp.asnumpy(xPhys_gpu) if gpu else xPhys
+    if save_history:
+        return final_xPhys, history
+    return final_xPhys

@@ -2,6 +2,7 @@ name: pytopo3d
 channels:
   - defaults
   - conda-forge
+  - nvidia
 dependencies:
   - python=3.10
   - numpy
@@ -20,3 +21,4 @@ dependencies:
     - trimesh
     - pypardiso
     - psutil
+    - cupy-cuda12x

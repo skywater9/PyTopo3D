@@ -19,6 +19,9 @@ cd ..
 # Install in development mode
 pip install -e .
 
+# Install with GPU support (for CUDA acceleration)
+pip install -e ".[gpu]"
+
 # Build the package
 python -m build
 
@@ -28,5 +31,9 @@ python -m build --sdist --wheel
 
 For users, the package can be installed directly from PyPI:
 ```bash
+# Basic installation
 pip install pytopo3d
+
+# Installation with GPU support
+pip install pytopo3d[gpu]
 ``` 
