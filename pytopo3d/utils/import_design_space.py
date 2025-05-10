@@ -64,6 +64,10 @@ def voxelize_mesh(mesh: trimesh.Trimesh, pitch: float = 1.0) -> np.ndarray:
         method="subdivide",
     )
 
+    # Fill the interior of the voxel grid to ensure a solid volume
+    # The fill() method operates in-place on voxel_grid.
+    voxel_grid.fill()
+
     # Print voxel grid information
     voxel_matrix = voxel_grid.matrix
     print(f"Voxel grid shape: {voxel_matrix.shape}")
@@ -73,9 +77,7 @@ def voxelize_mesh(mesh: trimesh.Trimesh, pitch: float = 1.0) -> np.ndarray:
 
 
 def stl_to_design_space(
-    stl_file: str, 
-    pitch: float = 1.0,
-    invert: bool = False
+    stl_file: str, pitch: float = 1.0, invert: bool = False
 ) -> np.ndarray:
     """
     Convert an STL file to a design space mask.
@@ -98,7 +100,7 @@ def stl_to_design_space(
     """
     # Import the STL file
     mesh = import_stl(stl_file)
-    
+
     # Voxelize the mesh with specified pitch
     voxels = voxelize_mesh(mesh, pitch)
 
