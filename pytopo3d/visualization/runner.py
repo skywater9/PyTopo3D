@@ -4,6 +4,7 @@ Visualization execution utilities for 3D topology optimization.
 This module contains functions for creating and saving visualizations.
 """
 
+import os
 from typing import List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -125,7 +126,12 @@ def create_visualization(
     plt.title(title)
 
     # Save visualization
-    viz_path = results_mgr.save_visualization(fig, filename, format=format, dpi=dpi)
+    if results_mgr:
+        viz_path = results_mgr.save_visualization(fig, filename, format=format, dpi=dpi)
+    else:
+        viz_path = f"{filename}.{format}"
+        os.makedirs(experiment_name, exist_ok=True)
+        plt.savefig(os.path.join(experiment_name, viz_path))
 
     # Close figure to free memory
     plt.close()
