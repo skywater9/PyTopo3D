@@ -28,7 +28,7 @@ def load_geometry_data(
     obstacle_config: Optional[str] = None,
     experiment_name: str = "experiment",
     logger: Optional[logging.Logger] = None,
-    results_mgr: Optional[ResultsManager] = None
+    results_mgr: Optional[ResultsManager] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load design space and obstacle data.
@@ -71,7 +71,7 @@ def load_geometry_data(
 
             # Update nelx, nely, nelz based on the voxelized shape
             local_nely, local_nelx, local_nelz = design_space_mask.shape
-            
+
             if logger:
                 logger.info(
                     f"Resolution from voxelization: {local_nely}x{local_nelx}x{local_nelz}"
@@ -90,19 +90,17 @@ def load_geometry_data(
                 results_mgr.copy_file(design_space_stl, "design_space.stl")
                 if logger:
                     logger.debug("Copied design space STL file to experiment directory")
-                
+
                 # Visualize the design space mask
                 visualize_design_space_mask(
-                    design_space_mask, 
-                    experiment_name, 
-                    results_mgr, 
-                    logger
+                    design_space_mask, experiment_name, results_mgr, logger
                 )
 
         except Exception as e:
             if logger:
                 logger.error(f"Error loading design space from STL: {e}")
                 import traceback
+
                 logger.debug(f"STL loading error details: {traceback.format_exc()}")
             raise
     else:
@@ -139,7 +137,10 @@ def load_geometry_data(
             logger.info(
                 "No obstacle configuration provided, creating a default empty obstacle mask"
             )
-        obstacle_mask = np.zeros((nely, nelx, nelz), dtype=bool)
+        if design_space_stl:
+            obstacle_mask = np.zeros_like(design_space_mask)
+        else:
+            obstacle_mask = np.zeros((nely, nelx, nelz), dtype=bool)
 
     # Combine design space and obstacle masks
     # Elements outside the design space are treated as obstacles
@@ -162,22 +163,22 @@ def visualize_design_space_mask(
 ) -> str:
     """
     Create and save visualization of the design space mask.
-    
+
     Args:
         design_space_mask: Boolean array representing the design space
         experiment_name: Name of the experiment
         results_mgr: Results manager instance
         logger: Logger instance
-        
+
     Returns:
         Path to the saved visualization
     """
     if logger:
         logger.info("Creating visualization of design space mask from STL")
-    
+
     # Convert boolean mask to float for visualization
     design_space_array = design_space_mask.astype(float)
-    
+
     # Create visualization of just the design space
     viz_path = create_visualization(
         arrays=[design_space_array],
@@ -190,7 +191,7 @@ def visualize_design_space_mask(
         filename="design_space_mask",
         title="Design Space Mask from STL",
     )
-    
+
     if logger:
         logger.info(f"Design space visualization saved to {viz_path}")
     return viz_path
