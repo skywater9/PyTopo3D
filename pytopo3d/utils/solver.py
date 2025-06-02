@@ -53,7 +53,7 @@ try:
         diag_M = 1.0 / (A.diagonal() + 1e-20)  # Jacobi
         M = LinearOperatorGPU(A.shape, matvec=lambda x: diag_M * x)
 
-        x, info = cg_gpu(A, b, M=M, maxiter=2000, atol=0.0, tol=1e-6)
+        x, info = cg_gpu(A, b, M=M)
         if info != 0:
             raise RuntimeError(f"CG failed to converge: info={info}")
         return x
