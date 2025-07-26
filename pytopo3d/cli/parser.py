@@ -63,6 +63,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=2000,
         help="Maximum number of iterations",
     )
+    basic_group.add_argument(
+        "--material_preset",
+        type=str,
+        default=None,
+        help="Selected material preset",
+    )
 
     # Performance parameters
     performance_group = parser.add_argument_group("Performance parameters")

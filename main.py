@@ -111,6 +111,7 @@ def main():
             penal=args.penal,
             rmin=args.rmin,
             disp_thres=args.disp_thres,
+            material_preset=args.material_preset,
             # Pass the variables (currently None for defaults)
             force_field=force_field,
             support_mask=support_mask,

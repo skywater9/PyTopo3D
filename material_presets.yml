@@ -1,0 +1,12 @@
+# E_x, E_z, E_y: Young's moduli (MPa)
+# nu_xy, nu_yz, nu_zx: Poisson's ratioes
+# G_xy, G_yz, G_zx: Shear moduli (MPa)
+
+PLA:
+  material_type: "transversely_isotropic"
+  E_x: 3300
+  E_z: 2200
+  nu_xy: 0.36
+  nu_zx: 0.36
+  G_xy: 1213
+  G_zx: 1000

@@ -26,6 +26,7 @@ from pytopo3d.utils.logger import get_logger
 from pytopo3d.utils.oc_update import optimality_criteria_update
 from pytopo3d.utils.solver import get_solver
 from pytopo3d.utils.stiffness import lk_H8
+from pytopo3d.utils.material_selection import get_material
 from pytopo3d.visualization.display import display_3D
 
 logger = get_logger(__name__)
@@ -55,6 +56,7 @@ def top3d(
     penal: float,
     rmin: float,
     disp_thres: float,
+    material_preset: str = None,
     obstacle_mask: Optional[np.ndarray] = None,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
@@ -95,7 +97,11 @@ def top3d(
     freedofs0, _ = build_supports(nelx, nely, nelz, ndof, support_mask)
 
     # Element stiffness
-    KE = lk_H8(nu)
+    if material_preset is None:
+        KE = lk_H8()
+    else:
+        KE = lk_H8(*get_material(material_preset))
+        
     edofMat, iK, jK = build_edof(nelx, nely, nelz)
     iK0, jK0 = iK - 1, jK - 1
 
