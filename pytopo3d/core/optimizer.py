@@ -155,7 +155,7 @@ def top3d(
     # ─────────────────────── main loop
     loop, change, c_prev = 0, 1.0, np.inf
     if save_history:
-        history_frequency = max(history_frequency, 500)
+        history_frequency = history_frequency
         if gpu:
             history["density_history"].append(cp.asnumpy(xPhys_gpu))
         else:
