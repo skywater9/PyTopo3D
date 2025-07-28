@@ -18,7 +18,8 @@ def lk_H8(
     G_yz: float = 0.4,
     G_zx: float = 0.4,
     material_type: str = "isotropic",
-    normalize: bool = True
+    normalize: bool = True,
+    elem_size: float = 1.0
 ) -> np.ndarray:
     """
     Generate the 24x24 element stiffness matrix for a fully anisotropic material
@@ -98,7 +99,7 @@ def lk_H8(
         return B
 
     # Hex element with unit dimensions
-    coords = node_locs
+    coords = node_locs * elem_size
 
     KE = np.zeros((24, 24))
     for w, (ξ, η, ζ) in zip(weights, gpts):

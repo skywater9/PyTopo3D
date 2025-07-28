@@ -2,11 +2,11 @@
 # nu_xy, nu_yz, nu_zx: Poisson's ratioes
 # G_xy, G_yz, G_zx: Shear moduli (MPa)
 
-PLA:
-  material_type: "transversely_isotropic"
+pla:
+  material_type: "transversely_isotropic" # TODO get accurate values
   E_x: 3300
-  E_z: 2200
+  E_z: 900
   nu_xy: 0.36
   nu_zx: 0.36
   G_xy: 1213
-  G_zx: 1000
+  G_zx: 300

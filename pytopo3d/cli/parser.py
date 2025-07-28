@@ -69,6 +69,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         help="Selected material preset",
     )
+    basic_group.add_argument(
+        "--elem_size",
+        type=float,
+        default=0.01,
+        help="Element size (meters)",
+    )
 
     # Performance parameters
     performance_group = parser.add_argument_group("Performance parameters")

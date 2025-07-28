@@ -29,7 +29,7 @@ def get_material(material_name: str):
     material_properties
         Tuple containing the material's mechanical properties
     """
-    material = materials.get(material_name)
+    material = materials.get(material_name).lower()
     if material is None:
         raise ValueError(f"Material '{material_name}' not found.")
 
@@ -44,6 +44,7 @@ def get_material(material_name: str):
         material.get("G_yz", None),
         material.get("G_zx", None),
         material.get("material_type", None),
+        False # normalize = False
     )
 
     return material_properties

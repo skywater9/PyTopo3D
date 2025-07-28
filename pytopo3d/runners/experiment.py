@@ -101,6 +101,7 @@ def execute_optimization(
     rmin: float,
     disp_thres: float,
     material_preset: str = None,
+    elem_size: float = 0.01,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
     tolx: float = 0.01,

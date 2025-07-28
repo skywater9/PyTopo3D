@@ -57,6 +57,7 @@ def top3d(
     rmin: float,
     disp_thres: float,
     material_preset: str = None,
+    elem_size: float = 0.01, # 1 cm 
     obstacle_mask: Optional[np.ndarray] = None,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
@@ -98,9 +99,12 @@ def top3d(
 
     # Element stiffness
     if material_preset is None:
-        KE = lk_H8()
+        KE = lk_H8(elem_size=elem_size)
     else:
-        KE = lk_H8(*get_material(material_preset))
+        KE = lk_H8(
+            *get_material(material_preset), 
+            elem_size=elem_size
+        )
         
     edofMat, iK, jK = build_edof(nelx, nely, nelz)
     iK0, jK0 = iK - 1, jK - 1
