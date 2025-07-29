@@ -19,6 +19,8 @@ def collect_metrics(
     rmin: float,
     disp_thres: float,
     material_preset: str = None,
+    force_field_preset: str = None,
+    support_mask_preset: str = None,
     elem_size: float = 0.01, # 1 cm 
     tolx: float = 0.01,
     maxloop: int = 2000,
@@ -78,6 +80,8 @@ def collect_metrics(
         "rmin": rmin,
         "disp_thres": disp_thres,
         "material_preset": material_preset,
+        "force_field_preset": force_field_preset,
+        "suport_mask_preset": support_mask_preset,
         "elem_size": elem_size,
         "tolx": tolx,
         "maxloop": maxloop,
