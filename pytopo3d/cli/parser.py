@@ -63,17 +63,32 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=2000,
         help="Maximum number of iterations",
     )
-    basic_group.add_argument(
+
+    # Variable experiment paremeters
+    variable_experiment_group = parser.add_argument_group("Variable experiment parameters")
+    variable_experiment_group.add_argument(
+        "--elem_size",
+        type=float,
+        default=0.01,
+        help="Element size (meters)",
+    )
+    variable_experiment_group.add_argument(
         "--material_preset",
         type=str,
         default=None,
         help="Selected material preset",
     )
-    basic_group.add_argument(
-        "--elem_size",
-        type=float,
-        default=0.01,
-        help="Element size (meters)",
+    variable_experiment_group.add_argument(
+        "--force_field_preset",
+        type=str,
+        default=None,
+        help="Selected force field preset",
+    )
+    variable_experiment_group.add_argument(
+        "--support_mask_preset",
+        type=str,
+        default=None,
+        help="Selected support mask preset",
     )
 
     # Performance parameters

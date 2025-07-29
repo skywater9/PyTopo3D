@@ -14,7 +14,8 @@ from pytopo3d.runners.experiment import (
     export_result_to_stl,
     setup_experiment,
 )
-from pytopo3d.utils.assembly import build_force_vector, build_supports
+from pytopo3d.utils.assembly import build_force_field, build_force_vector, build_support_mask, build_supports
+from pytopo3d.utils.config_loader import get_material_params, get_force_field_params, get_support_mask_params
 from pytopo3d.utils.boundary import create_bc_visualization_arrays
 from pytopo3d.utils.metrics import collect_metrics
 from pytopo3d.visualization.visualizer import (
@@ -69,16 +70,43 @@ def main():
         # Determine number of DOFs
         ndof = 3 * (args.nelx + 1) * (args.nely + 1) * (args.nelz + 1)
 
-        # --- Build Boundary Conditions ---
-        # TODO: Allow passing force_field and support_mask from args or config file
-        force_field = None  # Use default for now
-        support_mask = None  # Use default for now
+        # set material parameters/preset
+        material_preset = args.material_preset
+        if material_preset is not None:
+            material_params = get_material_params(material_preset)
+        else:
+            material_params = None
 
-        logger.info("Building force vector (using default settings)")
+        # --- Build Boundary Conditions ---
+        force_field_preset = args.force_field_preset
+        if force_field_preset is not None:
+            force_field = build_force_field(
+                args.nelx, 
+                args.nely, 
+                args.nelz, 
+                *get_force_field_params(force_field_preset)
+            )
+
+        else:
+            force_field = None
+
+        support_mask_preset = args.support_mask_preset
+        if support_mask_preset is not None:
+            support_mask = build_support_mask(
+                args.nelx, 
+                args.nely, 
+                args.nelz, 
+                *get_support_mask_params(support_mask_preset)
+            )
+
+        else:
+            support_mask = None
+
+        logger.info("Building force vector")
         F = build_force_vector(
             args.nelx, args.nely, args.nelz, ndof, force_field=force_field
         )
-        logger.info("Building support constraints (using default settings)")
+        logger.info("Building support constraints")
         freedofs0, fixeddof0 = build_supports(
             args.nelx, args.nely, args.nelz, ndof, support_mask=support_mask
         )
@@ -111,9 +139,9 @@ def main():
             penal=args.penal,
             rmin=args.rmin,
             disp_thres=args.disp_thres,
-            material_preset=args.material_preset,
             elem_size=args.elem_size,
             # Pass the variables (currently None for defaults)
+            material_params=material_params,
             force_field=force_field,
             support_mask=support_mask,
             # Removed F, freedofs0, fixeddof0

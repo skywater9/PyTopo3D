@@ -1,0 +1,9 @@
+# x1, x2; y1, y2; z1, z2: int range for elements that are fixed (all inclusive)
+
+support_mask_1:
+  x1: 2
+  x2: 3
+  y1: 4
+  y2: 5
+  z1: 4
+  z2: 5

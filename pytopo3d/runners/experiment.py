@@ -7,7 +7,7 @@ This module contains functions for setting up and managing topology optimization
 import logging
 import os
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Sequence
 
 import numpy as np
 
@@ -100,7 +100,7 @@ def execute_optimization(
     penal: float,
     rmin: float,
     disp_thres: float,
-    material_preset: str = None,
+    material_params: Optional[Sequence[float]] = None,
     elem_size: float = 0.01,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
@@ -156,6 +156,10 @@ def execute_optimization(
         logger.debug(f"Using provided support_mask with shape {support_mask.shape}")
     else:
         logger.debug("Using default support settings")
+    if material_params is not None:
+        logger.debug(f"Using provided material properties")
+    else:
+        logger.debug("Using default material settings (isotropic normalized)")
 
     # Run the optimization with history if requested
     optimization_result = top3d(
@@ -166,7 +170,7 @@ def execute_optimization(
         penal,
         rmin,
         disp_thres,
-        material_preset=material_preset,
+        material_params=material_params,
         force_field=force_field,
         support_mask=support_mask,
         obstacle_mask=combined_obstacle_mask,

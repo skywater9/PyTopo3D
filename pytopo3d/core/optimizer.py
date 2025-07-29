@@ -20,13 +20,12 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
 from pytopo3d.core.compliance import element_compliance
-from pytopo3d.utils.assembly import build_edof, build_force_vector, build_supports
+from pytopo3d.utils.assembly import build_edof, build_force_field, build_force_vector, build_support_mask, build_supports
 from pytopo3d.utils.filter import HAS_CUPY, apply_filter, build_filter
 from pytopo3d.utils.logger import get_logger
 from pytopo3d.utils.oc_update import optimality_criteria_update
 from pytopo3d.utils.solver import get_solver
 from pytopo3d.utils.stiffness import lk_H8
-from pytopo3d.utils.material_selection import get_material
 from pytopo3d.visualization.display import display_3D
 
 logger = get_logger(__name__)
@@ -56,7 +55,7 @@ def top3d(
     penal: float,
     rmin: float,
     disp_thres: float,
-    material_preset: str = None,
+    material_params: Optional[Sequence[float]] = None,
     elem_size: float = 0.01, # 1 cm 
     obstacle_mask: Optional[np.ndarray] = None,
     force_field: Optional[np.ndarray] = None,
@@ -98,11 +97,11 @@ def top3d(
     freedofs0, _ = build_supports(nelx, nely, nelz, ndof, support_mask)
 
     # Element stiffness
-    if material_preset is None:
+    if material_params is None:
         KE = lk_H8(elem_size=elem_size)
     else:
         KE = lk_H8(
-            *get_material(material_preset), 
+            material_params, 
             elem_size=elem_size
         )
         
