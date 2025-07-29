@@ -101,7 +101,7 @@ def top3d(
         KE = lk_H8(elem_size=elem_size)
     else:
         KE = lk_H8(
-            material_params, 
+            *material_params, 
             elem_size=elem_size
         )
         
