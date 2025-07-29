@@ -16,7 +16,7 @@ from pytopo3d.runners.experiment import (
 )
 from pytopo3d.utils.assembly import build_force_field, build_force_vector, build_support_mask, build_supports
 from pytopo3d.utils.config_loader import get_material_params, get_force_field_params, get_support_mask_params
-from pytopo3d.utils.boundary import create_bc_visualization_arrays
+from pytopo3d.utils.boundary import create_bc_visualization_arrays, create_bc_visualization_arrays_from_masks
 from pytopo3d.utils.metrics import collect_metrics
 from pytopo3d.visualization.visualizer import (
     create_optimization_animation,
@@ -112,8 +112,8 @@ def main():
         )
 
         # Create visualization arrays from actual BCs
-        loads_array, constraints_array = create_bc_visualization_arrays(
-            args.nelx, args.nely, args.nelz, ndof, F, fixeddof0
+        loads_array, constraints_array = create_bc_visualization_arrays_from_masks(
+            args.nelx, args.nely, args.nelz, ndof, force_field, support_mask
         )
         logger.info("Generated boundary condition visualization arrays")
 

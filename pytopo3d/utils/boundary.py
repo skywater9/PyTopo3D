@@ -143,3 +143,35 @@ def create_bc_visualization_arrays(
                         loads_array[ely, elx, elz] = 1.0
 
     return loads_array, constraints_array
+
+def create_bc_visualization_arrays_from_masks(
+    nelx: int, nely: int, nelz: int, ndof: int, force_field: np.ndarray, support_mask: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+        """
+    Creates visualization arrays for loads and constraints based on user input.
+
+    Maps force fields and support masks to the element grid for visualization.
+
+    Parameters
+    ----------
+    nelx, nely, nelz : int
+        Number of elements in x, y, z directions.
+    ndof : int
+        Total number of degrees of freedom.
+    force_field : np.ndarray
+        force field (shape: ndof).
+    support_mask : np.ndarray
+        constrained elements (shape: ndof).
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        (loads_array, constraints_array), each with shape (nely, nelx, nelz).
+    """
+        loads_array = np.zeros((nely, nelx, nelz), dtype=float)
+        constraints_array = np.zeros((nely, nelx, nelz), dtype=float)
+
+        loads_array[np.any(force_field != 0, axis=3)] = 1.0
+        constraints_array[support_mask != 0] = 1.0
+
+        return loads_array, constraints_array
