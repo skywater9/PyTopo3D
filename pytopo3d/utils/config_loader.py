@@ -12,6 +12,15 @@ material_presets_path = current_dir.parent.parent / "config" / "material_presets
 with open(material_presets_path, "r") as f:
     materials = yaml.safe_load(f)
 
+def to_float(val):
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except ValueError:
+        return val
+        
+
 def get_material_params(material_name: str):
     """
     Pass the material properties of preset
@@ -31,15 +40,15 @@ def get_material_params(material_name: str):
         raise ValueError(f"Material '{material_name}' not found.")
 
     material_properties = (
-        material.get("E_x", None),
-        material.get("E_y", None),
-        material.get("E_z", None),
-        material.get("nu_xy", None),
-        material.get("nu_yz", None),
-        material.get("nu_zx", None),
-        material.get("G_xy", None),
-        material.get("G_yz", None),
-        material.get("G_zx", None),
+        to_float(material.get("E_x", None)),
+        to_float(material.get("E_y", None)),
+        to_float(material.get("E_z", None)),
+        to_float(material.get("nu_xy", None)),
+        to_float(material.get("nu_yz", None)),
+        to_float(material.get("nu_zx", None)),
+        to_float(material.get("G_xy", None)),
+        to_float(material.get("G_yz", None)),
+        to_float(material.get("G_zx", None)),
         material.get("material_type", None),
         False # normalize = False
     )

@@ -96,6 +96,8 @@ def top3d(
     F = build_force_vector(nelx, nely, nelz, ndof, force_field)
     freedofs0, _ = build_supports(nelx, nely, nelz, ndof, support_mask)
 
+    print(f"Total applied force magnitude: {np.sum(np.abs(F))}")
+
     # Element stiffness
     if material_params is None:
         KE = lk_H8(elem_size=elem_size)
@@ -216,6 +218,8 @@ def top3d(
             xPhys_gpu[obstacle_gpu] = 0.0
             x_gpu = xnew_gpu
             current_vol = cp.mean(xPhys_gpu[~obstacle_gpu]).item()
+
+            print("Max displacement:", np.max(np.abs(U_gpu)))
 
         # ================================================= CPU
         else:
