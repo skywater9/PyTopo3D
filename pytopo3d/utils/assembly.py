@@ -50,7 +50,7 @@ def build_force_field(
     if not (0 <= x1 < x2 <= nelx and 0 <= y1 < y2 <= nely and 0 <= z1 < z2 <= nelz):
         raise ValueError("Specified index range is out of bounds")
 
-    nelem_affected = (x2-x1+1)*(y2-y1+1)*(z2-z1+1)
+    nelem_affected = (x2-x1)*(y2-y1)*(z2-z1)
 
     force_field[y1:y2, x1:x2, z1:z2, 0] = F_x / nelem_affected
     force_field[y1:y2, x1:x2, z1:z2, 1] = F_y / nelem_affected
