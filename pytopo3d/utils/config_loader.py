@@ -127,3 +127,25 @@ def get_support_mask_params(support_mask_name: str):
     )
 
     return support_mask_params
+
+current_dir = Path(__file__).parent
+odr_path = current_dir.parent.parent / "config" / "output_displacement_ranges.yml"
+with open(odr_path, "r") as f:
+    output_displacement_ranges = yaml.safe_load(f)
+
+def get_output_displacement_range(output_displacement_range_name: str):
+
+    output_displacement_range = output_displacement_ranges.get(output_displacement_range_name.lower())
+    if output_displacement_range is None:
+        raise ValueError(f"Output displacement range '{output_displacement_range_name}' not found.")
+
+    odr_vals = (
+        output_displacement_range.get("x1"),
+        output_displacement_range.get("x2"),
+        output_displacement_range.get("y1"),
+        output_displacement_range.get("y2"),
+        output_displacement_range.get("z1"),
+        output_displacement_range.get("z2"),
+    )
+
+    return odr_vals

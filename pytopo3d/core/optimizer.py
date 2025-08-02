@@ -26,6 +26,7 @@ from pytopo3d.utils.logger import get_logger
 from pytopo3d.utils.oc_update import optimality_criteria_update
 from pytopo3d.utils.solver import get_solver
 from pytopo3d.utils.stiffness import lk_H8
+from pytopo3d.utils.part_evaluation import get_avg_displacement_vector, estimate_failure_force
 from pytopo3d.visualization.display import display_3D
 
 logger = get_logger(__name__)
@@ -65,7 +66,8 @@ def top3d(
     save_history: bool = False,
     history_frequency: int = 10,
     use_gpu: bool = False,
-) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, Any]]]:
+    output_displacement_range: Optional[Tuple[int,int,int,int,int,int]] = None,
+) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, Any]], Optional[np.ndarray]]:
     # ─────────────────────── setup
     gpu = HAS_CUPY and use_gpu
     if use_gpu and not HAS_CUPY:
@@ -95,8 +97,6 @@ def top3d(
     # Force / supports
     F = build_force_vector(nelx, nely, nelz, ndof, force_field)
     freedofs0, _ = build_supports(nelx, nely, nelz, ndof, support_mask)
-
-    print(f"Total applied force magnitude: {np.sum(np.abs(F))}")
 
     # Element stiffness
     if material_params is None:
@@ -219,8 +219,6 @@ def top3d(
             x_gpu = xnew_gpu
             current_vol = cp.mean(xPhys_gpu[~obstacle_gpu]).item()
 
-            print("Max displacement:", np.max(np.abs(U_gpu)))
-
         # ================================================= CPU
         else:
             stiff = Emin + (xPhys.ravel(order="F") ** penal) * (E0 - Emin)
@@ -280,7 +278,30 @@ def top3d(
         )
 
     # ─────────────────────── final output
-    final_xPhys = cp.asnumpy(xPhys_gpu) if gpu else xPhys
+    output_displacement = None
+
+    if gpu:
+        final_xPhys = cp.asnumpy(xPhys_gpu)
+        if output_displacement_range is not None:
+            output_displacement = get_avg_displacement_vector(
+                U_gpu,
+                *output_displacement_range,
+                nelx,
+                nely,
+                nelz,
+            )
+
+    else: 
+        final_xPhys = xPhys
+        if output_displacement_range is not None:
+            output_displacement = get_avg_displacement_vector(
+                U,
+                *output_displacement_range,
+                nelx,
+                nely,
+                nelz,
+            )
+        
     if save_history:
-        return final_xPhys, history
-    return final_xPhys
+        return final_xPhys, history, output_displacement
+    return final_xPhys, None, output_displacement

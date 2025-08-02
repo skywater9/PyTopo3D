@@ -143,6 +143,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         help="Description of the experiment (optional)",
     )
+    output_group.add_argument(
+        "--output_displacement_range",
+        type=str,
+        default=None,
+        help="Preset node range to measure displacement",
+    )
 
     # Animation parameters
     animation_group = parser.add_argument_group("Animation parameters")

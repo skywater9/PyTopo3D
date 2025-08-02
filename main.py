@@ -15,7 +15,7 @@ from pytopo3d.runners.experiment import (
     setup_experiment,
 )
 from pytopo3d.utils.assembly import build_force_field, build_force_vector, build_support_mask, build_supports
-from pytopo3d.utils.config_loader import get_material_params, get_force_field_params, get_support_mask_params
+from pytopo3d.utils.config_loader import get_material_params, get_force_field_params, get_support_mask_params, get_output_displacement_range
 from pytopo3d.utils.boundary import create_bc_visualization_arrays, create_bc_visualization_arrays_from_masks
 from pytopo3d.utils.metrics import collect_metrics
 from pytopo3d.visualization.visualizer import (
@@ -130,8 +130,10 @@ def main():
             combined_obstacle_mask=combined_obstacle_mask,
         )
 
+        output_displacement_range = get_output_displacement_range(args.output_displacement_range)
+
         # Run the optimization - Passing force_field and support_mask
-        xPhys, history, run_time = execute_optimization(
+        xPhys, history, output_displacement, run_time = execute_optimization(
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
@@ -152,6 +154,7 @@ def main():
             logger=logger,
             combined_obstacle_mask=combined_obstacle_mask,
             use_gpu=args.gpu,
+            output_displacement_range=output_displacement_range
         )
 
         # Save the result to the experiment directory
