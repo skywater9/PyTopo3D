@@ -235,6 +235,7 @@ def main():
             run_time=run_time,
             gif_path=gif_path,
             stl_exported=stl_exported,
+            output_displacement=output_displacement,
         )
         results_mgr.update_metrics(metrics)
         logger.debug("Metrics updated")

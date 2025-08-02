@@ -38,6 +38,7 @@ def collect_metrics(
     run_time: float = 0.0,
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
+    output_displacement: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
@@ -66,6 +67,7 @@ def collect_metrics(
         run_time: Optimization runtime in seconds
         gif_path: Path to animation GIF if created
         stl_exported: Whether STL export was successful
+        output_displacement: displacement vector for selected nodes
 
     Returns:
         Dictionary of metrics
@@ -86,6 +88,9 @@ def collect_metrics(
         "tolx": tolx,
         "maxloop": maxloop,
         "runtime_seconds": run_time,
+        "output_displacement_x": output_displacement[0],
+        "output_displacement_y": output_displacement[1],
+        "output_displacement_z": output_displacement[2],
         "has_obstacles": obstacle_config is not None,
     }
 
