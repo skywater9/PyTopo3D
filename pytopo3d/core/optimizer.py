@@ -308,14 +308,13 @@ def top3d(
                 nelx,
                 nely,
                 nelz,
-                is_gpu=gpu,
             )
 
         # Failure force estimation
         B_matrices = generate_B_matrices(nelx, nely, nelz, elem_size)
         stress_tensors = build_element_stress_tensors(U, edofMat, B_matrices, make_C_matrix(*material_params[1:]))
 
-        failure_force = estimate_failure_force_from_elasticity(F, stress_tensors, *material_params)
+        failure_force = estimate_failure_force_from_elasticity(F, stress_tensors, *material_params[:7])
         
     if save_history:
         return final_xPhys, history, output_displacement, failure_force
