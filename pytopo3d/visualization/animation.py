@@ -210,56 +210,34 @@ def save_optimization_gif(
     gif_path = os.path.join(viz_dir, f"{filename}.gif")
 
     try:
-        logger.info(f"Combining {len(png_paths)} frames into GIF animation...")
+        logger.info("Trying alternative method for GIF creation...")
+        # Try using PIL directly
+        from PIL import Image
 
-        # Use imageio to create the GIF - Use the standard imageio API instead of v3
         images = []
         for png_path in png_paths:
             if os.path.exists(png_path):
                 try:
-                    images.append(imageio.imread(png_path))
+                    img = Image.open(png_path)
+                    images.append(img)
                 except Exception as e:
-                    logger.warning(f"Could not read frame {png_path}: {e}")
+                    logger.warning(f"Could not open image {png_path} with PIL: {e}")
 
         if images:
-            # Use the standard imageio.mimsave function with loop=0 for infinite looping
-            imageio.mimsave(gif_path, images, duration=1.0 / fps, loop=0)
-            logger.info(f"GIF animation saved to {gif_path}")
+            # Save as GIF using PIL
+            images[0].save(
+                gif_path,
+                save_all=True,
+                append_images=images[1:],
+                optimize=False,
+                duration=int(1000 / fps),
+                loop=0,
+            )
+            logger.info(f"GIF animation saved using PIL to {gif_path}")
         else:
-            raise ValueError("No frames could be read to create the GIF")
-
-    except Exception as e:
-        logger.error(f"Error creating GIF animation: {e}")
-        # Try another approach as a last resort
-        try:
-            logger.info("Trying alternative method for GIF creation...")
-            # Try using PIL directly
-            from PIL import Image
-
-            images = []
-            for png_path in png_paths:
-                if os.path.exists(png_path):
-                    try:
-                        img = Image.open(png_path)
-                        images.append(img)
-                    except Exception as e:
-                        logger.warning(f"Could not open image {png_path} with PIL: {e}")
-
-            if images:
-                # Save as GIF using PIL
-                images[0].save(
-                    gif_path,
-                    save_all=True,
-                    append_images=images[1:],
-                    optimize=False,
-                    duration=int(1000 / fps),
-                    loop=0,
-                )
-                logger.info(f"GIF animation saved using PIL to {gif_path}")
-            else:
-                logger.error("No valid frame images found for GIF creation")
-        except Exception as e2:
-            logger.error(f"Alternative GIF creation method also failed: {e2}")
+            logger.error("No valid frame images found for GIF creation")
+    except Exception as e2:
+        logger.error(f"GIF creation method using PIL failed: {e2}")
 
     # Optionally clean up the temporary PNG files
     for png_path in png_paths:

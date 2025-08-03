@@ -1,9 +1,9 @@
 # x1, x2; y1, y2; z1, z2: int range for nodes whose displacements will be measured
 
 displacement_range_1:
-  x1: 0
-  x2: 1
-  y1: 0
-  y2: 10
+  x1: 20
+  x2: 21
+  y1: 8
+  y2: 19
   z1: 0
-  z2: 10
+  z2: 1
