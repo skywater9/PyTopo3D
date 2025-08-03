@@ -1,0 +1,18 @@
+# E_x, E_z, E_y: Young's moduli (Pa)
+# nu_xy, nu_yz, nu_zx: Poisson's ratioes
+# G_xy, G_yz, G_zx: Shear moduli (Pa)
+
+pla: # TODO get accurate values
+  sigma_yield: 1000
+  E_x: 3300
+  E_z: 1500
+  G_xy: 1213
+  G_zx: 600
+  nu_xy: 0.36
+  nu_zx: 0.36
+
+steel: # TODO get accurate values
+  sigma_yield: 2.15e8
+  E_x: 2.0e11
+  G_xy: 7.7e10
+  nu_xy: 0.3

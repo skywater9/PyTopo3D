@@ -36,6 +36,7 @@ setup(
         "trimesh",
         "psutil",
         "pypardiso",
+        "pyyaml"
     ],
     extras_require={
         "dev": [

@@ -7,98 +7,210 @@ for a hexahedral (H8) element.
 
 import numpy as np
 
-def lk_H8(nu):
+def lk_H8(
+    E_x: float = 1,
+    E_y: float = None,
+    E_z: float = None,
+    G_xy: float = 0.4,
+    G_yz: float = None,
+    G_zx: float = None,
+    nu_xy: float = 0.3,
+    nu_yz: float = None,
+    nu_zx: float = None,
+    elem_size: float = 1.0
+) -> np.ndarray:
     """
-    Generate the 24x24 hexahedral element stiffness matrix (H8).
-    
+    Generate the 24x24 element stiffness matrix for a fully anisotropic material
+    using 8-point Gauss integration.
+
     Parameters
     ----------
-    nu : float
-        Poisson's ratio.
-        
+    E_x, E_y, E_z : float
+        Young's moduli along x, y, z axes.
+    nu_xy, nu_yz, nu_zx : float
+        Poisson's ratios.
+    G_xy, G_yz, G_zx : float
+        Shear moduli.
+    elem_size : float
+        Side length of each H8 element in meters.
+
     Returns
     -------
-    ndarray
+    KE : ndarray
         24x24 element stiffness matrix.
     """
-    A = np.array(
-        [
-            [32, 6, -8, 6, -6, 4, 3, -6, -10, 3, -3, -3, -4, -8],
-            [-48, 0, 0, -24, 24, 0, 0, 0, 12, -12, 0, 12, 12, 12],
-        ],
-        dtype=float,
+    C = make_C_matrix(
+        E_x,
+        E_y,
+        E_z,
+        G_xy,
+        G_yz,
+        G_zx,
+        nu_xy,
+        nu_yz,
+        nu_zx,
+        normalize=False
     )
-    kvec = (1.0 / 144.0) * A.T @ np.array([1.0, nu])
-    k = kvec.ravel()  # 14 entries
+    assert C.shape == (6, 6), "Elasticity tensor must be 6x6 in Voigt notation."
 
-    K1 = np.array(
-        [
-            [k[0], k[1], k[1], k[2], k[4], k[4]],
-            [k[1], k[0], k[1], k[3], k[5], k[6]],
-            [k[1], k[1], k[0], k[3], k[6], k[5]],
-            [k[2], k[3], k[3], k[0], k[7], k[7]],
-            [k[4], k[5], k[6], k[7], k[0], k[1]],
-            [k[4], k[6], k[5], k[7], k[1], k[0]],
-        ]
-    )
-    K2 = np.array(
-        [
-            [k[8], k[7], k[11], k[5], k[3], k[6]],
-            [k[7], k[8], k[11], k[4], k[2], k[4]],
-            [k[9], k[9], k[12], k[6], k[3], k[5]],
-            [k[5], k[4], k[10], k[8], k[1], k[9]],
-            [k[3], k[2], k[4], k[1], k[8], k[11]],
-            [k[10], k[3], k[5], k[11], k[9], k[12]],
-        ]
-    )
-    K3 = np.array(
-        [
-            [k[5], k[6], k[3], k[8], k[11], k[7]],
-            [k[6], k[5], k[3], k[9], k[12], k[9]],
-            [k[4], k[4], k[2], k[7], k[11], k[8]],
-            [k[8], k[9], k[1], k[5], k[10], k[4]],
-            [k[11], k[12], k[9], k[10], k[5], k[3]],
-            [k[1], k[11], k[8], k[3], k[4], k[2]],
-        ]
-    )
-    K4 = np.array(
-        [
-            [k[13], k[10], k[10], k[12], k[9], k[9]],
-            [k[10], k[13], k[10], k[11], k[8], k[7]],
-            [k[10], k[10], k[13], k[11], k[7], k[8]],
-            [k[12], k[11], k[11], k[13], k[6], k[6]],
-            [k[9], k[8], k[7], k[6], k[13], k[10]],
-            [k[9], k[7], k[8], k[6], k[10], k[13]],
-        ]
-    )
-    K5 = np.array(
-        [
-            [k[0], k[1], k[7], k[2], k[4], k[3]],
-            [k[1], k[0], k[7], k[3], k[5], k[10]],
-            [k[7], k[7], k[0], k[4], k[10], k[5]],
-            [k[2], k[3], k[4], k[0], k[7], k[1]],
-            [k[4], k[5], k[10], k[7], k[0], k[7]],
-            [k[3], k[10], k[5], k[1], k[7], k[0]],
-        ]
-    )
-    K6 = np.array(
-        [
-            [k[13], k[10], k[6], k[12], k[9], k[11]],
-            [k[10], k[13], k[6], k[11], k[8], k[1]],
-            [k[6], k[6], k[13], k[9], k[1], k[8]],
-            [k[12], k[11], k[9], k[13], k[6], k[10]],
-            [k[9], k[8], k[1], k[6], k[13], k[6]],
-            [k[11], k[1], k[8], k[10], k[6], k[13]],
-        ]
-    )
+    # Gauss points and weights for 2-point Gauss quadrature
+    gpts = np.array([[-1/np.sqrt(3), -1/np.sqrt(3), -1/np.sqrt(3)],
+                     [ 1/np.sqrt(3), -1/np.sqrt(3), -1/np.sqrt(3)],
+                     [-1/np.sqrt(3),  1/np.sqrt(3), -1/np.sqrt(3)],
+                     [ 1/np.sqrt(3),  1/np.sqrt(3), -1/np.sqrt(3)],
+                     [-1/np.sqrt(3), -1/np.sqrt(3),  1/np.sqrt(3)],
+                     [ 1/np.sqrt(3), -1/np.sqrt(3),  1/np.sqrt(3)],
+                     [-1/np.sqrt(3),  1/np.sqrt(3),  1/np.sqrt(3)],
+                     [ 1/np.sqrt(3),  1/np.sqrt(3),  1/np.sqrt(3)]])
+    weights = np.ones(8)
 
-    KE_block = np.vstack(
-        [
-            np.hstack([K1, K2, K3, K4]),
-            np.hstack([K2.T, K5, K6, K3.T]),
-            np.hstack([K3.T, K6, K5.T, K2.T]),
-            np.hstack([K4, K3, K2, K1]),
-        ]
-    )
-    factor = 1.0 / ((nu + 1.0) * (1.0 - 2.0 * nu))
-    return factor * KE_block
+    # Node positions in reference element
+    node_locs = np.array([
+        [-1, -1, -1],
+        [ 1, -1, -1],
+        [ 1,  1, -1],
+        [-1,  1, -1],
+        [-1, -1,  1],
+        [ 1, -1,  1],
+        [ 1,  1,  1],
+        [-1,  1,  1]
+    ]) * 0.5
+
+    # Shape function derivatives with respect to ξ, η, ζ
+    def shape_fn_grad(ξ, η, ζ):
+        dN = np.zeros((8, 3))
+        for i, (xi, eta, zeta) in enumerate(node_locs):
+            dN[i, 0] = 0.125 * (1 + eta * η) * (1 + zeta * ζ) * xi / abs(xi)
+            dN[i, 1] = 0.125 * (1 + xi * ξ) * (1 + zeta * ζ) * eta / abs(eta)
+            dN[i, 2] = 0.125 * (1 + xi * ξ) * (1 + eta * η) * zeta / abs(zeta)
+        return dN
+
+    # B-matrix constructor
+    def make_B(dNdx):
+        B = np.zeros((6, 24))
+        for i in range(8):
+            i3 = i * 3
+            dNxi, dNyi, dNzi = dNdx[i]
+            B[:, i3:i3+3] = np.array([
+                [dNxi,     0,     0],
+                [    0, dNyi,     0],
+                [    0,     0, dNzi],
+                [dNyi, dNxi,     0],
+                [    0, dNzi, dNyi],
+                [dNzi,     0, dNxi]
+            ])
+        return B
+
+    # Hex element with unit dimensions
+    coords = node_locs * elem_size
+
+    KE = np.zeros((24, 24))
+    for w, (ξ, η, ζ) in zip(weights, gpts):
+        # Compute shape function gradients in physical coordinates
+        dN_dxi = shape_fn_grad(ξ, η, ζ)    # 8x3
+        J = dN_dxi.T @ coords              # 3x3 Jacobian
+        detJ = np.linalg.det(J)
+        if detJ <= 0:
+            raise ValueError("Negative or zero Jacobian determinant.")
+
+        dN_dx = np.linalg.solve(J.T, dN_dxi.T).T  # 8x3 shape fn grads in x,y,z
+        B = make_B(dN_dx)
+        KE += B.T @ C @ B * detJ * w
+
+    return KE
+
+
+def make_C_matrix(
+    E_x: float,
+    E_y: float,
+    E_z: float,
+    G_xy: float,
+    G_yz: float,
+    G_zx: float,
+    nu_xy: float,
+    nu_yz: float,
+    nu_zx: float,
+    normalize: bool = False
+) -> np.ndarray:
+    """
+    Generate a 6x6 stiffness matrix C in Voigt notation for 3D anisotropic materials.
+
+    Parameters
+    ----------
+    E_x, E_y, E_z : float
+        Young's moduli along x, y, z axes.
+    nu_xy, nu_yz, nu_zx : float
+        Poisson's ratios.
+    G_xy, G_yz, G_zx : float
+        Shear moduli.
+    normalize : bool
+        If True, normalizes so that E_x = 1.0.
+
+    Returns
+    -------
+    C : ndarray
+        6x6 stiffness matrix in Voigt notation.
+    """
+
+    material_type = "orthotropic"
+    if E_y is None and nu_yz is None and G_yz is None:
+        material_type = "transversely_isotropic"
+        if E_z is None and nu_zx is None and G_zx is None:
+            material_type = "isotropic"
+
+    if material_type == "isotropic":
+        # Variables: E_x, nu_xy
+        E = E_x
+        nu = nu_xy
+        G = E / (2 * (1 + nu))
+        lam = E * nu / ((1 + nu) * (1 - 2 * nu))
+        mu = G
+
+        C = np.array([
+            [lam + 2*mu, lam,        lam,        0,     0,     0],
+            [lam,        lam + 2*mu, lam,        0,     0,     0],
+            [lam,        lam,        lam + 2*mu, 0,     0,     0],
+            [0,          0,          0,          mu,    0,     0],
+            [0,          0,          0,          0,     mu,    0],
+            [0,          0,          0,          0,     0,     mu]
+        ])
+
+    elif material_type == "transversely_isotropic":
+        # Variables: E_x, E_z, nu_xy, nu_zx, G_xy, G_zx
+        # Assumes transverse isotropy about Z-axis
+        S = np.zeros((6, 6))
+
+        S[0, 0] = S[1, 1] = 1 / E_x
+        S[2, 2] = 1 / E_z
+        S[0, 1] = S[1, 0] = -nu_xy / E_x
+        S[0, 2] = S[2, 0] = -nu_zx / E_z
+        S[1, 2] = S[2, 1] = -nu_zx / E_z
+        S[3, 3] = S[4, 4] = 1 / G_xy
+        S[5, 5] = 1 / G_zx
+
+        C = np.linalg.inv(S)
+
+    elif material_type == "orthotropic":
+        # Variables: E_x, E_z, E_y, nu_xy, nu_yz, nu_zx, G_xy, G_yz, G_zx
+        S = np.zeros((6, 6))
+
+        S[0, 0] = 1 / E_x
+        S[1, 1] = 1 / E_y
+        S[2, 2] = 1 / E_z
+
+        S[0, 1] = S[1, 0] = -nu_xy / E_x
+        S[1, 2] = S[2, 1] = -nu_yz / E_y
+        S[0, 2] = S[2, 0] = -nu_zx / E_z
+
+        S[3, 3] = 1 / G_yz
+        S[4, 4] = 1 / G_zx
+        S[5, 5] = 1 / G_xy
+
+        C = np.linalg.inv(S)
+
+    else:
+        raise ValueError("Invalid material_type. Choose 'isotropic', 'orthotropic', or 'transversely_isotropic'.")
+
+    if normalize and E_x != 0:
+        return C / E_x
+    return C

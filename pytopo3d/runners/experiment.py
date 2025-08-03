@@ -7,7 +7,7 @@ This module contains functions for setting up and managing topology optimization
 import logging
 import os
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Sequence
 
 import numpy as np
 
@@ -100,6 +100,8 @@ def execute_optimization(
     penal: float,
     rmin: float,
     disp_thres: float,
+    material_params: Optional[Sequence[float]] = None,
+    elem_size: float = 0.01,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
     tolx: float = 0.01,
@@ -109,7 +111,8 @@ def execute_optimization(
     logger: logging.Logger = None,
     combined_obstacle_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
-) -> Tuple[np.ndarray, Optional[Dict], float]:
+    output_displacement_range: Optional[Tuple[int,int,int,int,int,int]] = None,
+) -> Tuple[np.ndarray, Optional[Dict], Optional[np.ndarray], float, float]:
     """
     Run the topology optimization process.
 
@@ -154,6 +157,10 @@ def execute_optimization(
         logger.debug(f"Using provided support_mask with shape {support_mask.shape}")
     else:
         logger.debug("Using default support settings")
+    if material_params is not None:
+        logger.debug(f"Using provided material properties")
+    else:
+        logger.debug("Using default material settings (isotropic normalized)")
 
     # Run the optimization with history if requested
     optimization_result = top3d(
@@ -164,6 +171,7 @@ def execute_optimization(
         penal,
         rmin,
         disp_thres,
+        material_params=material_params,
         force_field=force_field,
         support_mask=support_mask,
         obstacle_mask=combined_obstacle_mask,
@@ -172,25 +180,25 @@ def execute_optimization(
         save_history=create_animation,
         history_frequency=animation_frequency,
         use_gpu=use_gpu,
+        output_displacement_range=output_displacement_range,
     )
 
     # Check if we got history back
-    history = None
     if create_animation:
-        xPhys, history = optimization_result
+        xPhys, history, output_displacement, failure_force = optimization_result
         if logger:
             logger.info(
                 f"Optimization history captured with {len(history['density_history'])} frames"
             )
     else:
-        xPhys = optimization_result
+        xPhys, history, output_displacement, failure_force = optimization_result # temp fix
 
     end_time = time.time()
     run_time = end_time - start_time
     if logger:
         logger.debug(f"Optimization finished in {run_time:.2f} seconds")
 
-    return xPhys, history, run_time
+    return xPhys, history, output_displacement, failure_force, run_time
 
 
 def export_result_to_stl(

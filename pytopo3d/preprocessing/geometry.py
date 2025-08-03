@@ -23,13 +23,13 @@ def load_geometry_data(
     nely: int,
     nelz: int,
     design_space_stl: Optional[str] = None,
-    pitch: float = 1.0,
+    target_nelx: int = None,
     invert_design_space: bool = False,
     obstacle_config: Optional[str] = None,
     experiment_name: str = "experiment",
     logger: Optional[logging.Logger] = None,
     results_mgr: Optional[ResultsManager] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int, int, int]:
     """
     Load design space and obstacle data.
 
@@ -38,7 +38,8 @@ def load_geometry_data(
         nely: Number of elements in y direction
         nelz: Number of elements in z direction
         design_space_stl: Path to STL file defining design space
-        pitch: Voxelization pitch for STL
+        target_nelx: Target amount of elements in x-axis
+        target_physical_x: Target physical length in x-axis
         invert_design_space: Whether to invert design space (STL represents void)
         obstacle_config: Path to obstacle configuration file
         experiment_name: Name of the experiment
@@ -46,7 +47,7 @@ def load_geometry_data(
         results_mgr: Results manager instance
 
     Returns:
-        Tuple containing design space mask, obstacle mask, and combined obstacle mask
+        Tuple containing design space mask, obstacle mask, combined obstacle mask, and dimensions in x,y and z.
     """
     # Handle design space from STL if provided
     design_space_mask = None
@@ -57,7 +58,7 @@ def load_geometry_data(
 
             # Use the voxelization pitch
             if logger:
-                logger.info(f"Using voxelization pitch: {pitch}")
+                logger.info(f"Target elements in x: {target_nelx}")
 
             # Invert flag
             if invert_design_space and logger:
@@ -66,15 +67,15 @@ def load_geometry_data(
             # Generate design space from STL
             # Resolution is determined by the mesh and pitch
             design_space_mask = stl_to_design_space(
-                design_space_stl, pitch=pitch, invert=invert_design_space
+                design_space_stl, target_nelx=target_nelx, invert=invert_design_space
             )
 
             # Update nelx, nely, nelz based on the voxelized shape
-            local_nely, local_nelx, local_nelz = design_space_mask.shape
+            nelx, nely, nelz = design_space_mask.shape
 
             if logger:
                 logger.info(
-                    f"Resolution from voxelization: {local_nely}x{local_nelx}x{local_nelz}"
+                    f"Resolution from voxelization: {nelx}x{nely}x{nelz}"
                 )
 
             # Save design space mask if results_mgr is provided
@@ -155,7 +156,7 @@ def load_geometry_data(
                 f"Combined obstacle and design space masks, {np.count_nonzero(combined_obstacle_mask)} elements restricted"
             )
 
-    return design_space_mask, obstacle_mask, combined_obstacle_mask
+    return design_space_mask, obstacle_mask, combined_obstacle_mask, nelx, nely, nelz
 
 
 def visualize_design_space_mask(

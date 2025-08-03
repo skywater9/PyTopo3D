@@ -15,6 +15,7 @@ Thumbs.db
 *.swo
 .vscode/
 .idea/
+.venv
 
 # Build artifacts
 pytopo3d.egg-info/

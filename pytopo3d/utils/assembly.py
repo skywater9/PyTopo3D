@@ -9,6 +9,55 @@ from typing import Optional, Set, Tuple
 
 import numpy as np
 
+def build_force_field(
+    nelx: int,
+    nely: int,
+    nelz: int,
+    x1: int,
+    x2: int,
+    y1: int,
+    y2: int,
+    z1: int,
+    z2: int,
+    F_x: float,
+    F_y: float,
+    F_z: float
+):
+    """
+    Builds 4-dimensional force field array
+    Force in Newtons (N)
+
+    Parameters
+    -----------
+        nelx, nely, nelz: int
+            Total number of elements in all axes
+
+        x1, x2: int
+        y1, y2: int
+        z1, z2: int
+            x, y, and z axis ranges of applied force
+        
+        F_x, F_y, F_z: float
+            Force vector (N) to apply to all elements in range
+
+    Returns
+    --------
+        np.ndarray
+            force field array of shape (nely, nelx, nelz, 3)
+    """
+    force_field = np.zeros((nely, nelx, nelz, 3), dtype=float)
+
+    if not (0 <= x1 < x2 <= nelx and 0 <= y1 < y2 <= nely and 0 <= z1 < z2 <= nelz):
+        raise ValueError("Specified index range is out of bounds")
+
+    nelem_affected = (x2-x1)*(y2-y1)*(z2-z1)
+
+    force_field[y1:y2, x1:x2, z1:z2, 0] = F_x / nelem_affected
+    force_field[y1:y2, x1:x2, z1:z2, 1] = F_y / nelem_affected
+    force_field[y1:y2, x1:x2, z1:z2, 2] = F_z / nelem_affected
+
+    return force_field
+
 
 def build_force_vector(
     nelx: int,
@@ -118,6 +167,43 @@ def build_force_vector(
 
     return F
 
+def build_support_mask(
+    nelx: int,
+    nely: int,
+    nelz: int,
+    x1: int,
+    x2: int,
+    y1: int,
+    y2: int,
+    z1: int,
+    z2: int,
+):
+    """
+    Builds 3-dimensional support mask array
+
+    Parameters
+    -----------
+        nelx, nely, nelz: int
+            Total number of elements in all axes
+
+        x1, x2: int
+        y1, y2: int
+        z1, z2: int
+            x, y, and z axis ranges of applied mask
+
+    Returns
+    --------
+        np.ndarray
+            support mask array of shape (nely, nelx, nelz)
+    """
+    support_mask = np.zeros((nely, nelx, nelz), dtype=bool)
+    
+    if not (0 <= x1 < x2 <= nelx and 0 <= y1 < y2 <= nely and 0 <= z1 < z2 <= nelz):
+        raise ValueError("Specified index range is out of bounds")
+
+    support_mask[y1:y2, x1:x2, z1:z2] = True
+
+    return support_mask
 
 def build_supports(
     nelx: int,
