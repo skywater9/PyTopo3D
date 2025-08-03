@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
-
 def collect_metrics(
+    terminal_input: str,
     nelx: int,
     nely: int,
     nelz: int,
@@ -39,11 +39,13 @@ def collect_metrics(
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
     output_displacement: Optional[np.ndarray] = None,
+    failure_force: float = None,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
 
     Args:
+        terminal_input: full string input of terminal for reference
         nelx: Number of elements in x direction
         nely: Number of elements in y direction
         nelz: Number of elements in z direction
@@ -68,12 +70,14 @@ def collect_metrics(
         gif_path: Path to animation GIF if created
         stl_exported: Whether STL export was successful
         output_displacement: displacement vector for selected nodes
+        failure_force: force magnitude required for failure
 
     Returns:
         Dictionary of metrics
     """
     # Create metrics dictionary
     metrics = {
+        "terminal_input": terminal_input,
         "nelx": nelx,
         "nely": nely,
         "nelz": nelz,
@@ -88,9 +92,6 @@ def collect_metrics(
         "tolx": tolx,
         "maxloop": maxloop,
         "runtime_seconds": run_time,
-        "output_displacement_x": output_displacement[0],
-        "output_displacement_y": output_displacement[1],
-        "output_displacement_z": output_displacement[2],
         "has_obstacles": obstacle_config is not None,
     }
 
@@ -118,6 +119,14 @@ def collect_metrics(
         metrics["stl_level"] = stl_level
         metrics["stl_smoothed"] = smooth_stl
         metrics["stl_smooth_iterations"] = smooth_iterations
+
+    if output_displacement is not None:
+        metrics["output_displacement_x"] = float(output_displacement[0])
+        metrics["output_displacement_y"] = float(output_displacement[1])
+        metrics["output_displacement_z"] = float(output_displacement[2])
+
+    if failure_force is not None:
+        metrics["failure_force"] = float(failure_force)
 
     return metrics
 

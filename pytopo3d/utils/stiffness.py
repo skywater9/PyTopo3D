@@ -8,17 +8,15 @@ for a hexahedral (H8) element.
 import numpy as np
 
 def lk_H8(
-    E_x: float = 1.0,
-    E_y: float = 1.0,
-    E_z: float = 1.0,
-    nu_xy: float = 0.3,
-    nu_yz: float = 0.3,
-    nu_zx: float = 0.3,
+    E_x: float = 1,
+    E_y: float = None,
+    E_z: float = None,
     G_xy: float = 0.4,
-    G_yz: float = 0.4,
-    G_zx: float = 0.4,
-    material_type: str = "isotropic",
-    normalize: bool = True,
+    G_yz: float = None,
+    G_zx: float = None,
+    nu_xy: float = 0.3,
+    nu_yz: float = None,
+    nu_zx: float = None,
     elem_size: float = 1.0
 ) -> np.ndarray:
     """
@@ -27,8 +25,14 @@ def lk_H8(
 
     Parameters
     ----------
-    C : ndarray
-        6x6 anisotropic stiffness matrix in Voigt notation.
+    E_x, E_y, E_z : float
+        Young's moduli along x, y, z axes.
+    nu_xy, nu_yz, nu_zx : float
+        Poisson's ratios.
+    G_xy, G_yz, G_zx : float
+        Shear moduli.
+    elem_size : float
+        Side length of each H8 element in meters.
 
     Returns
     -------
@@ -39,14 +43,13 @@ def lk_H8(
         E_x,
         E_y,
         E_z,
-        nu_xy,
-        nu_yz,
-        nu_zx,
         G_xy,
         G_yz,
         G_zx,
-        material_type,
-        normalize
+        nu_xy,
+        nu_yz,
+        nu_zx,
+        normalize=False
     )
     assert C.shape == (6, 6), "Elasticity tensor must be 6x6 in Voigt notation."
 
@@ -121,22 +124,19 @@ def make_C_matrix(
     E_x: float,
     E_y: float,
     E_z: float,
-    nu_xy: float,
-    nu_yz: float,
-    nu_zx: float,
     G_xy: float,
     G_yz: float,
     G_zx: float,
-    material_type: str,
-    normalize: bool
+    nu_xy: float,
+    nu_yz: float,
+    nu_zx: float,
+    normalize: bool = False
 ) -> np.ndarray:
     """
     Generate a 6x6 stiffness matrix C in Voigt notation for 3D anisotropic materials.
 
     Parameters
     ----------
-    material_type : str
-        'isotropic', 'orthotropic', or 'transversely_isotropic'.
     E_x, E_y, E_z : float
         Young's moduli along x, y, z axes.
     nu_xy, nu_yz, nu_zx : float
@@ -151,6 +151,13 @@ def make_C_matrix(
     C : ndarray
         6x6 stiffness matrix in Voigt notation.
     """
+
+    material_type = "orthotropic"
+    if E_y is None and nu_yz is None and G_yz is None:
+        material_type = "transversely_isotropic"
+        if E_z is None and nu_zx is None and G_zx is None:
+            material_type = "isotropic"
+
     if material_type == "isotropic":
         # Variables: E_x, nu_xy
         E = E_x

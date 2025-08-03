@@ -133,7 +133,7 @@ def main():
         output_displacement_range = get_output_displacement_range(args.output_displacement_range)
 
         # Run the optimization - Passing force_field and support_mask
-        xPhys, history, output_displacement, run_time = execute_optimization(
+        xPhys, history, output_displacement, failure_force, run_time = execute_optimization(
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
@@ -206,8 +206,11 @@ def main():
             result_path=result_path,
         )
 
+        terminal_input = ' '.join(sys.argv[1:])
+
         # Collect and save metrics
         metrics = collect_metrics(
+            terminal_input=terminal_input,
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
@@ -236,6 +239,7 @@ def main():
             gif_path=gif_path,
             stl_exported=stl_exported,
             output_displacement=output_displacement,
+            failure_force=failure_force
         )
         results_mgr.update_metrics(metrics)
         logger.debug("Metrics updated")
