@@ -77,31 +77,37 @@ def voxelize_mesh(mesh: trimesh.Trimesh, pitch: float = 1.0) -> np.ndarray:
 
 
 def stl_to_design_space(
-    stl_file: str, pitch: float = 1.0, invert: bool = False
-) -> np.ndarray:
+    stl_file: str,
+    target_nelx: int = None,
+    invert: bool = False,
+):
     """
     Convert an STL file to a design space mask.
-    The resolution is determined entirely by the mesh geometry and pitch value.
 
     Parameters
     ----------
     stl_file : str
         Path to the STL file.
-    pitch : float
-        The distance between voxel centers (smaller values create finer detail).
+    target_nelx : int 
+        Desired number of voxels in the x-direction.
     invert : bool, optional
-        If True, invert the mask (i.e., True becomes False and vice versa).
-        This is useful when the STL represents a void space rather than the design space.
+        If True, invert the mask.
 
     Returns
     -------
-    np.ndarray
-        Boolean array where True values represent the design space.
+    tuple
+        - np.ndarray: Boolean array representing the design space.
     """
     # Import the STL file
     mesh = import_stl(stl_file)
 
-    # Voxelize the mesh with specified pitch
+    # Voxelize the mesh with specified number of elements in X
+    bounds = mesh.bounds
+    x_min, y_min, z_min = bounds[0]
+    x_max, y_max, z_max = bounds[1]
+
+    length_x = x_max - x_min
+    pitch = length_x / (target_nelx-1)
     voxels = voxelize_mesh(mesh, pitch)
 
     # Invert if requested

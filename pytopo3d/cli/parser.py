@@ -63,6 +63,18 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=2000,
         help="Maximum number of iterations",
     )
+    basic_group.add_argument(
+        "--target_nelx", 
+        type=int, 
+        default=None, 
+        help="Target number of elements in x dimension for STL voxelization (optional)"
+    )
+    basic_group.add_argument(
+        "--target_physical_x", 
+        type=float, 
+        default=None, 
+        help="Target physical length in x direction (mm) for STL voxelization (optional)"
+    )
 
     # Variable experiment paremeters
     variable_experiment_group = parser.add_argument_group("Variable experiment parameters")
@@ -194,6 +206,13 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Invert the design space (treat STL as void space rather than design space)",
     )
+    design_space_group.add_argument(
+        "--stl_unit_scale",
+        type=float,
+        default=1.0,
+        help="Scale factor to convert STL units to meters (e.g., 0.001 for mm to m)",
+    )
+
 
     # Obstacle related arguments
     obstacle_group = parser.add_argument_group("Obstacle parameters")

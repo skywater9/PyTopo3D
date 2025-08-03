@@ -54,18 +54,22 @@ def main():
             args.experiment_name = results_mgr.experiment_name
 
         # Load design space and obstacle data
-        design_space_mask, obstacle_mask, combined_obstacle_mask = load_geometry_data(
+        design_space_mask, obstacle_mask, combined_obstacle_mask, args.nelx, args.nely, args.nelz = load_geometry_data(
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
             design_space_stl=getattr(args, "design_space_stl", None),
-            pitch=getattr(args, "pitch", 1.0),
+            target_nelx=getattr(args, "target_nelx", None),
             invert_design_space=getattr(args, "invert_design_space", False),
             obstacle_config=getattr(args, "obstacle_config", None),
             experiment_name=args.experiment_name,
             logger=logger,
             results_mgr=results_mgr,
         )
+
+        if getattr(args, "design_space_stl", None) is not None:  
+            target_physical_x=getattr(args, "target_physical_x", None)
+            args.elem_size = target_physical_x / args.nelx
 
         # Determine number of DOFs
         ndof = 3 * (args.nelx + 1) * (args.nely + 1) * (args.nelz + 1)
