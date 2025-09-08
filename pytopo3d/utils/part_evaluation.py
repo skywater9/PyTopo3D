@@ -79,55 +79,39 @@ def compute_element_stress(
     return stress
 
 
-def estimate_failure_force_from_elasticity(
+def estimate_failure_force(
     force_vector: np.ndarray,
     stress_tensors: np.ndarray,
-    sigma_ref: float,
-    E_x: float,
-    E_y: float,
-    E_z: float,
-    G_xy: float,
-    G_yz: float,
-    G_zx: float,
+    sigma_x_yield: float,
+    sigma_y_yield: float,
+    sigma_z_yield: float,
+    tau_xy_yield: float,
+    tau_yz_yield: float,
+    tau_zx_yield: float,
 ) -> float:
     """
-    Estimate failure force using one reference stress and partial/full elasticity data.
+    Estimate failure force using independent yield strengths for normal and shear stresses.
 
     Parameters:
         force_vector : (ndof,) applied force vector
-        stress_tensors : (nele, 6) stress tensors for each element
-        E_x, E_z : Young's moduli (MPa)
-        G_xy, G_zx : Shear moduli (MPa)
-        G_yz : Shear modulus (optional, defaults to G_zx if None)
-        E_y : Young's modulus in y (optional, defaults to E_x)
-        G_default : default for missing shear moduli (optional)
-        sigma_ref : reference yield stress (MPa)
+        stress_tensors : (nele, 6) stress tensors for each element in order
+                         [σ_x, σ_y, σ_z, τ_yz, τ_zx, τ_xy]
+        sigma_x_yield, sigma_y_yield, sigma_z_yield : yield stresses in MPa for normal stresses
+        tau_xy_yield, tau_yz_yield, tau_zx_yield : yield stresses in MPa for shear stresses
 
     Returns:
         Estimated failure force in same units as force_vector norm
     """
-    E_y = E_y if E_y is not None else E_x
-    G_yz = G_yz if G_yz is not None else G_xy
-
-    E_z = E_z if E_z is not None else E_x
-    G_zx = G_zx if G_zx is not None else G_xy
-
-    sx_yield = sigma_ref * (E_x / E_x)
-    sy_yield = sigma_ref * (E_y / E_x)
-    sz_yield = sigma_ref * (E_z / E_x)
-    txy_yield = sigma_ref * (G_xy / E_x)
-    tzx_yield = sigma_ref * (G_zx / E_x)
-    tyz_yield = sigma_ref * (G_yz / E_x)
 
     ratios = []
     for sigma in stress_tensors:
         sx, sy, sz, tyz, tzx, txy = sigma
-        f = ((sx / sx_yield)**2 +
-             (sy / sy_yield)**2 +
-             (sz / sz_yield)**2 +
-             (txy / txy_yield)**2 +
-             (tyz / tyz_yield)**2 +
-             (tzx / tzx_yield)**2)
+        f = ((sx / sigma_x_yield)**2 +
+             (sy / sigma_y_yield)**2 +
+             (sz / sigma_z_yield)**2 +
+             (txy / tau_xy_yield)**2 +
+             (tyz / tau_yz_yield)**2 +
+             (tzx / tau_zx_yield)**2)
         ratios.append(np.sqrt(f))
 
     max_ratio = max(ratios)

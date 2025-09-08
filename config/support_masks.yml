@@ -1,9 +1,17 @@
-# x1, x2; y1, y2; z1, z2: int range for elements that are fixed (all inclusive)
+# x1, x2; y1, y2; z1, z2: int range for elements that are fixed
 
 support_mask_0:
   x1: 0
   x2: 1
   y1: 0
   y2: 1
+  z1: 0
+  z2: 1
+
+support_mask_1:
+  x1: 0
+  x2: 20
+  y1: 0
+  y2: 16
   z1: 0
   z2: 1

@@ -6,6 +6,7 @@ This script provides a command-line interface to run the topology optimization.
 """
 
 import sys
+import numpy as np
 
 from pytopo3d.cli.parser import parse_args
 from pytopo3d.preprocessing.geometry import load_geometry_data
@@ -162,7 +163,17 @@ def main():
         )
 
         # Save the result to the experiment directory
-        result_path = results_mgr.save_result(xPhys, "optimized_design.npy")
+
+        
+        # Make a union array for stl export that can be tested
+        force_mask_bool = np.any(force_field != 0, axis=-1)
+        support_mask_bool = support_mask.astype(bool)
+        union_mask = force_mask_bool | support_mask_bool
+
+        xPhys_union = xPhys.copy()
+        xPhys_union[union_mask] = 1.0
+
+        result_path = results_mgr.save_result(xPhys_union, "optimized_design.npy")
         logger.debug(f"Optimization result saved to {result_path}")
 
         # Create visualization of the final result

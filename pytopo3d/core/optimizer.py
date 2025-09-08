@@ -26,7 +26,7 @@ from pytopo3d.utils.logger import get_logger
 from pytopo3d.utils.oc_update import optimality_criteria_update
 from pytopo3d.utils.solver import get_solver
 from pytopo3d.utils.stiffness import lk_H8, make_C_matrix
-from pytopo3d.utils.part_evaluation import get_avg_displacement_vector, generate_B_matrices, build_element_stress_tensors, estimate_failure_force_from_elasticity
+from pytopo3d.utils.part_evaluation import get_avg_displacement_vector, generate_B_matrices, build_element_stress_tensors, estimate_failure_force
 from pytopo3d.visualization.display import display_3D
 
 logger = get_logger(__name__)
@@ -103,7 +103,7 @@ def top3d(
         KE = lk_H8(elem_size=elem_size)
     else:
         KE = lk_H8(
-            *material_params[1:], # sigma_yield not passed
+            *material_params[6:], # yield strengths not passed
             elem_size=elem_size
         )
         
@@ -294,9 +294,9 @@ def top3d(
 
         # Failure force estimation (gpu)
         B_matrices = generate_B_matrices(nelx, nely, nelz, elem_size)
-        stress_tensors = build_element_stress_tensors(cp.asnumpy(U_gpu), edofMat, B_matrices, make_C_matrix(*material_params[1:]))
+        stress_tensors = build_element_stress_tensors(cp.asnumpy(U_gpu), edofMat, B_matrices, make_C_matrix(*material_params[6:]))
 
-        failure_force = estimate_failure_force_from_elasticity(F_gpu, stress_tensors, *material_params[:7])
+        failure_force = estimate_failure_force_from_elasticity(F_gpu, stress_tensors, *material_params[:6])
 
     else: 
         final_xPhys = xPhys
@@ -312,9 +312,9 @@ def top3d(
 
         # Failure force estimation
         B_matrices = generate_B_matrices(nelx, nely, nelz, elem_size)
-        stress_tensors = build_element_stress_tensors(U, edofMat, B_matrices, make_C_matrix(*material_params[1:]))
+        stress_tensors = build_element_stress_tensors(U, edofMat, B_matrices, make_C_matrix(*material_params[6:]))
 
-        failure_force = estimate_failure_force_from_elasticity(F, stress_tensors, *material_params[:7])
+        failure_force = estimate_failure_force(F, stress_tensors, *material_params[:6])
         
     if save_history:
         return final_xPhys, history, output_displacement, failure_force

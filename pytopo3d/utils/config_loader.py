@@ -40,7 +40,12 @@ def get_material_params(material_name: str):
         raise ValueError(f"Material '{material_name}' not found.")
 
     material_properties = (
-        to_float(material.get("sigma_yield", None)),
+        to_float(material.get("sigma_x_yield", None)),
+        to_float(material.get("sigma_y_yield", None)),
+        to_float(material.get("sigma_z_yield", None)),
+        to_float(material.get("tau_xy_yield", None)),
+        to_float(material.get("tau_yz_yield", None)),
+        to_float(material.get("tau_zx_yield", None)),
         to_float(material.get("E_x", None)),
         to_float(material.get("E_y", None)),
         to_float(material.get("E_z", None)),

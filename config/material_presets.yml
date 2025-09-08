@@ -3,7 +3,12 @@
 # G_xy, G_yz, G_zx: Shear moduli (Pa)
 
 pla: # TODO get accurate values
-  sigma_yield: 30e6
+  sigma_x_yield: 30e6
+  sigma_y_yield: 30e6
+  sigma_z_yield: 30e6
+  tau_xy_yield: 20e6
+  tau_yz_yield: 20e6
+  tau_zx_yield: 20e6
   E_x: 45e6
   E_z: 25e6
   G_xy: 40e6
@@ -11,7 +16,7 @@ pla: # TODO get accurate values
   nu_xy: 0.36
   nu_zx: 0.36
 
-steel: # TODO get accurate values
+steel:
   sigma_yield: 215e6
   E_x: 200000e6
   G_xy: 77000e6
