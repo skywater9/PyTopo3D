@@ -1,5 +1,16 @@
 # x1, x2; y1, y2; z1, z2: int range for elements that force is applied to (all inclusive)
-# F_x, F_y, F_z: the values of the 3D force vector applied to elements in range (Newtons)
+# F_x, F_y, F_z: the values of the 3D force vector applied to elements in range (Newtons)\
+
+force_field_0:
+  x1: 0
+  x2: 0
+  y1: 0
+  y2: 0
+  z1: 0
+  z2: 0
+  F_x: 0
+  F_y: 0
+  F_z: 0
 
 force_field_1:
   x1: 19
@@ -8,6 +19,6 @@ force_field_1:
   y2: 20
   z1: 0
   z2: 14
-  F_x: 1000
+  F_x: 0
   F_y: 0
-  F_z: 0
+  F_z: -1000

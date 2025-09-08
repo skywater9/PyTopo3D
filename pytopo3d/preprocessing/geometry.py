@@ -156,6 +156,10 @@ def load_geometry_data(
                 f"Combined obstacle and design space masks, {np.count_nonzero(combined_obstacle_mask)} elements restricted"
             )
 
+    # obstacle mask format patch
+    obstacle_mask = np.transpose(obstacle_mask, (1, 0, 2))
+    combined_obstacle_mask = np.transpose(combined_obstacle_mask, (1, 0, 2))
+
     return design_space_mask, obstacle_mask, combined_obstacle_mask, nelx, nely, nelz
 
 
