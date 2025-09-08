@@ -39,7 +39,6 @@ def load_geometry_data(
         nelz: Number of elements in z direction
         design_space_stl: Path to STL file defining design space
         target_nelx: Target amount of elements in x-axis
-        target_physical_x: Target physical length in x-axis
         invert_design_space: Whether to invert design space (STL represents void)
         obstacle_config: Path to obstacle configuration file
         experiment_name: Name of the experiment

@@ -19,7 +19,7 @@ def voxel_to_stl(
     fix_mesh: bool = True,
     smooth_mesh: bool = True,
     smooth_iterations: int = 5,
-    upscale_factor: Optional[int] = None,
+    upscale_factor: Optional[int] = 3,
 ) -> Union[str, trimesh.Trimesh]:
     """
     Convert a voxel representation (.npy file or np.ndarray) to an STL mesh file or trimesh object.

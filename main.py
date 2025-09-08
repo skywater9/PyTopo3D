@@ -70,7 +70,7 @@ def main():
 
         if getattr(args, "design_space_stl", None) is not None:  
             target_physical_x=getattr(args, "target_physical_x", None)
-            args.elem_size = target_physical_x / args.nelx
+            args.elem_size = target_physical_x / args.nelx # in meters
 
         # Determine number of DOFs
         ndof = 3 * (args.nelx + 1) * (args.nely + 1) * (args.nelz + 1)

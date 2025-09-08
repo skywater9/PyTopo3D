@@ -73,7 +73,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         "--target_physical_x", 
         type=float, 
         default=None, 
-        help="Target physical length in x direction (mm) for STL voxelization (optional)"
+        help="Target physical length in x direction (meters)"
     )
 
     # Variable experiment paremeters
