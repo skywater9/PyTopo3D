@@ -206,13 +206,6 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Invert the design space (treat STL as void space rather than design space)",
     )
-    design_space_group.add_argument(
-        "--stl_unit_scale",
-        type=float,
-        default=1.0,
-        help="Scale factor to convert STL units to meters (e.g., 0.001 for mm to m)",
-    )
-
 
     # Obstacle related arguments
     obstacle_group = parser.add_argument_group("Obstacle parameters")

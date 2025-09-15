@@ -109,6 +109,9 @@ def stl_to_design_space(
     length_x = x_max - x_min
     pitch = length_x / (target_nelx-1)
     voxels = voxelize_mesh(mesh, pitch)
+    
+    # Transpose axes to match expected orientation (swap x and y)
+    voxels = np.transpose(voxels, (1, 0, 2))
 
     # Invert if requested
     if invert:
