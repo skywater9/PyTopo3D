@@ -64,16 +64,23 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Maximum number of iterations",
     )
     basic_group.add_argument(
-        "--target_nelx", 
-        type=int, 
-        default=None, 
+        "--target-nelx",
+        type=int,
+        default=None,
         help="Target number of elements in x dimension for STL voxelization (optional)"
     )
     basic_group.add_argument(
-        "--target_physical_x", 
-        type=float, 
-        default=None, 
+        "--target-physical-x",
+        type=float,
+        default=None,
         help="Target physical length in x direction (meters)"
+    )
+    basic_group.add_argument(
+        "--protected-zones",
+        nargs="+",
+        type=str,
+        default=None,
+        help="List of protected zone preset names (space-separated)",
     )
 
     # Variable experiment paremeters
@@ -85,19 +92,19 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Element size (meters)",
     )
     variable_experiment_group.add_argument(
-        "--material_preset",
+        "--material-preset",
         type=str,
         default=None,
         help="Selected material preset",
     )
     variable_experiment_group.add_argument(
-        "--force_field_preset",
+        "--force-field-preset",
         type=str,
         default=None,
         help="Selected force field preset",
     )
     variable_experiment_group.add_argument(
-        "--support_mask_preset",
+        "--support-mask-preset",
         type=str,
         default=None,
         help="Selected support mask preset",
@@ -156,7 +163,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Description of the experiment (optional)",
     )
     output_group.add_argument(
-        "--output_displacement_range",
+        "--output-displacement-range",
         type=str,
         default=None,
         help="Preset node range to measure displacement",

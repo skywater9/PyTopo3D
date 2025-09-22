@@ -26,6 +26,7 @@ def visualize_initial_setup(
     logger: Optional[logging.Logger] = None,
     results_mgr: Optional[ResultsManager] = None,
     combined_obstacle_mask: Optional[np.ndarray] = None,
+    protected_zone_mask: Optional[np.ndarray] = None,
 ) -> str:
     """
     Create and save initial visualization showing boundary conditions and obstacles.
@@ -48,6 +49,11 @@ def visualize_initial_setup(
     obstacle_array = (
         combined_obstacle_mask.astype(float)
         if combined_obstacle_mask is not None
+        else np.zeros((nely, nelx, nelz))
+    )
+    protected_zone_array = (
+        protected_zone_mask.astype(float)
+        if protected_zone_mask is not None
         else np.zeros((nely, nelx, nelz))
     )
 
@@ -86,11 +92,11 @@ def visualize_initial_setup(
             f"obstacle_array shape mismatch: expected {expected_shape}, got {obstacle_array.shape}"
         )
 
-    arrays_to_visualize = [obstacle_array, loads_array, constraints_array]
-    thresholds = [0.5, 0.5, 0.5]
-    colors = ["yellow", "blue", "red"]
-    labels = ["Obstacles", "Loads", "Constraints"]
-    alphas = [0.3, 0.9, 0.9]  # Make obstacles transparent
+    arrays_to_visualize = [obstacle_array, loads_array, constraints_array, protected_zone_array]
+    thresholds = [0.5, 0.5, 0.5, 0.5]
+    colors = ["yellow", "blue", "red", "green"]
+    labels = ["Obstacles", "Loads", "Constraints", "Protected Elements"]
+    alphas = [0.2, 0.9, 0.9, 0.2]  # Make obstacles transparent
 
     boundary_viz_path = create_visualization(
         arrays=arrays_to_visualize,

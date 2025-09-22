@@ -112,6 +112,7 @@ def execute_optimization(
     combined_obstacle_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
     output_displacement_range: Optional[Tuple[int,int,int,int,int,int]] = None,
+    protected_zone_mask: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, Optional[Dict], Optional[np.ndarray], float, float]:
     """
     Run the topology optimization process.
@@ -181,6 +182,7 @@ def execute_optimization(
         history_frequency=animation_frequency,
         use_gpu=use_gpu,
         output_displacement_range=output_displacement_range,
+        protected_zone_mask=protected_zone_mask,
     )
 
     # Check if we got history back

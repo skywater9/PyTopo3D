@@ -67,6 +67,7 @@ def top3d(
     history_frequency: int = 10,
     use_gpu: bool = False,
     output_displacement_range: Optional[Tuple[int,int,int,int,int,int]] = None,
+    protected_zone_mask: Optional[np.ndarray] = None,
 ) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, Any]], Optional[np.ndarray], float]:
     # ─────────────────────── setup
     gpu = HAS_CUPY and use_gpu
@@ -84,7 +85,14 @@ def top3d(
         if obstacle_mask is None
         else obstacle_mask
     )
-    design_nele = nele - obstacle_mask.sum()
+
+    protected_zone_mask = (
+        np.zeros((nely, nelx, nelz), dtype=bool)
+        if protected_zone_mask is None
+        else protected_zone_mask
+    )
+
+    design_nele = nele - obstacle_mask.sum() - protected_zone_mask.sum()
     logger.debug(f"design elements: {design_nele}/{nele}")
 
     # History dict
@@ -121,6 +129,7 @@ def top3d(
         F_gpu = cp.asarray(F)
         freedofs0_gpu = cp.asarray(freedofs0)
         obstacle_gpu = cp.asarray(obstacle_mask)
+        protected_gpu = cp.asarray(protected_zone_mask)
         U_gpu = cp.zeros(ndof)
 
     # Filter
@@ -135,11 +144,13 @@ def top3d(
     # Initial design
     if gpu:
         x_gpu = cp.full((nely, nelx, nelz), volfrac)
+        x_gpu[protected_gpu] = 1.0
         x_gpu[obstacle_gpu] = 0.0
         xPhys_gpu = apply_filter(H_gpu, x_gpu, Hs_gpu, x_gpu.shape, use_gpu=True)
         xPhys_gpu[obstacle_gpu] = 0.0
     else:
         x = np.full((nely, nelx, nelz), volfrac)
+        x_gpu[protected_gpu] = 1.0
         x[obstacle_mask] = 0.0
         xPhys = (H * x.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
         xPhys[obstacle_mask] = 0.0
@@ -198,7 +209,7 @@ def top3d(
 
             dc_gpu = apply_filter(H_gpu, dc_gpu, Hs_gpu, xPhys_gpu.shape, use_gpu=True)
             dv_gpu = apply_filter(H_gpu, dv_gpu, Hs_gpu, xPhys_gpu.shape, use_gpu=True)
-            dc_gpu[obstacle_gpu] = dv_gpu[obstacle_gpu] = 0.0
+            dc_gpu[obstacle_gpu | protected_gpu] = dv_gpu[obstacle_gpu | protected_gpu] = 0.0
             dv_gpu += 1e-9
 
             xnew_gpu, change = optimality_criteria_update(
@@ -210,14 +221,19 @@ def top3d(
                 Hs_gpu,
                 nele,
                 obstacle_gpu,
+                protected_gpu,
                 design_nele,
                 use_gpu=True,
             )
+            xnew_gpu[protected_gpu] = 1.0
             xnew_gpu[obstacle_gpu] = 0.0
             xPhys_gpu = apply_filter(H_gpu, xnew_gpu, Hs_gpu, xnew_gpu.shape, use_gpu=True)
+            xnew_gpu[protected_gpu] = 1.0
             xPhys_gpu[obstacle_gpu] = 0.0
             x_gpu = xnew_gpu
-            current_vol = cp.mean(xPhys_gpu[~obstacle_gpu]).item()
+
+            free_mask = (~obstacle_gpu) & (~protected_gpu)
+            current_vol = cp.mean(xPhys_gpu[~(obstacle_gpu | protected_gpu)]).item()
 
         # ================================================= CPU
         else:
@@ -239,7 +255,7 @@ def top3d(
             dv = np.ones_like(xPhys)
             dc = (H * (dc.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
             dv = (H * (dv.ravel(order="F") / Hs)).reshape((nely, nelx, nelz), order="F")
-            dc[obstacle_mask] = dv[obstacle_mask] = 0.0
+            dc[obstacle_mask | protected_zone_mask] = dv[obstacle_mask | protected_zone_mask] = 0.0
             dv += 1e-9
 
             xnew, change = optimality_criteria_update(
@@ -251,14 +267,19 @@ def top3d(
                 Hs,
                 nele,
                 obstacle_mask,
+                protected_zone_mask,
                 design_nele,
                 use_gpu=False,
             )
+            xnew[protected_zone_mask] = 1.0
             xnew[obstacle_mask] = 0.0
             xPhys = (H * xnew.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
+            xnew[protected_zone_mask] = 1.0
             xPhys[obstacle_mask] = 0.0
             x = xnew
-            current_vol = xPhys[~obstacle_mask].mean()
+
+            free_mask = (~obstacle_mask) & (~protected_zone_mask)
+            current_vol = xPhys[free_mask].mean()
 
         # ------------------------------------------------ logging / history
         c_delta, c_prev = c - c_prev, c
@@ -296,7 +317,7 @@ def top3d(
         B_matrices = generate_B_matrices(nelx, nely, nelz, elem_size)
         stress_tensors = build_element_stress_tensors(cp.asnumpy(U_gpu), edofMat, B_matrices, make_C_matrix(*material_params[6:]))
 
-        failure_force = estimate_failure_force_from_elasticity(F_gpu, stress_tensors, *material_params[:6])
+        failure_force = estimate_failure_force(F_gpu, stress_tensors, *material_params[:6])
 
     else: 
         final_xPhys = xPhys

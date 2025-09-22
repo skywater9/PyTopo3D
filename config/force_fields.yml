@@ -20,5 +20,5 @@ force_field_1:
   z1: 38
   z2: 39
   F_x: 0
-  F_y: 1000
+  F_y: 100
   F_z: 0

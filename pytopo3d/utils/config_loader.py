@@ -8,6 +8,41 @@ from pathlib import Path
 import yaml
 
 current_dir = Path(__file__).parent
+protected_zones_path = current_dir.parent.parent / "config" / "protected_zone_ranges.yml"
+with open(protected_zones_path, "r") as f:
+    protected_zones = yaml.safe_load(f)
+
+def get_protected_zone_ranges(zone_names: tuple):
+    """
+    Pass the protected zone ranges for multiple presets
+
+    Parameter
+    ----------
+    zone_names
+        Tuple of protected zone preset names
+
+    Returns
+    -------
+    protected_zone_ranges
+        Tuple of tuples, each containing the range for a protected zone
+    """
+    ranges = []
+    for name in zone_names:
+        zone = protected_zones.get(name.lower())
+        if zone is None:
+            raise ValueError(f"Protected zone '{name}' not found.")
+        zone_range = (
+            zone.get("x1"),
+            zone.get("x2"),
+            zone.get("y1"),
+            zone.get("y2"),
+            zone.get("z1"),
+            zone.get("z2"),
+        )
+        ranges.append(zone_range)
+    return tuple(ranges)
+
+current_dir = Path(__file__).parent
 material_presets_path = current_dir.parent.parent / "config" / "material_presets.yml"
 with open(material_presets_path, "r") as f:
     materials = yaml.safe_load(f)
@@ -131,6 +166,7 @@ def get_support_mask_params(support_mask_name: str):
     )
 
     return support_mask_params
+
 
 current_dir = Path(__file__).parent
 odr_path = current_dir.parent.parent / "config" / "output_displacement_ranges.yml"

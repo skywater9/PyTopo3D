@@ -107,6 +107,18 @@ def main():
         else:
             support_mask = None
 
+        # Load protected zone masks if specified
+        protected_zone_mask = None
+        if getattr(args, "protected_zones", None):
+            from pytopo3d.utils.config_loader import get_protected_zone_ranges
+            zone_names = tuple(args.protected_zones)
+            protected_zone_ranges = get_protected_zone_ranges(zone_names)
+            # Build a combined mask for all protected zones
+            protected_zone_mask = np.zeros((args.nely, args.nelx, args.nelz), dtype=bool)
+            for zone in protected_zone_ranges:
+                x1, x2, y1, y2, z1, z2 = zone
+                protected_zone_mask[y1:y2, x1:x2, z1:z2] = True
+
         logger.info("Building force vector")
         F = build_force_vector(
             args.nelx, args.nely, args.nelz, ndof, force_field=force_field
@@ -133,6 +145,7 @@ def main():
             logger=logger,
             results_mgr=results_mgr,
             combined_obstacle_mask=combined_obstacle_mask,
+            protected_zone_mask=protected_zone_mask,
         )
 
         output_displacement_range = get_output_displacement_range(args.output_displacement_range)
@@ -147,11 +160,9 @@ def main():
             rmin=args.rmin,
             disp_thres=args.disp_thres,
             elem_size=args.elem_size,
-            # Pass the variables (currently None for defaults)
             material_params=material_params,
             force_field=force_field,
             support_mask=support_mask,
-            # Removed F, freedofs0, fixeddof0
             tolx=getattr(args, "tolx", 0.01),
             maxloop=getattr(args, "maxloop", 2000),
             create_animation=getattr(args, "create_animation", False),
@@ -159,7 +170,8 @@ def main():
             logger=logger,
             combined_obstacle_mask=combined_obstacle_mask,
             use_gpu=args.gpu,
-            output_displacement_range=output_displacement_range
+            output_displacement_range=output_displacement_range,
+            protected_zone_mask=protected_zone_mask
         )
 
         # Save the result to the experiment directory
