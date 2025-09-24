@@ -22,3 +22,14 @@ force_field_1:
   F_x: 0
   F_y: 100
   F_z: 0
+
+force_field_2:
+  x1: 49
+  x2: 50
+  y1: 0
+  y2: 20
+  z1: 0
+  z2: 20
+  F_x: 10000
+  F_y: 0
+  F_z: 0

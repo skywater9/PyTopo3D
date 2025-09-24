@@ -152,64 +152,21 @@ def make_C_matrix(
         6x6 stiffness matrix in Voigt notation.
     """
 
-    material_type = "orthotropic"
-    if E_y is None and nu_yz is None and G_yz is None:
-        material_type = "transversely_isotropic"
-        if E_z is None and nu_zx is None and G_zx is None:
-            material_type = "isotropic"
+    S = np.zeros((6, 6))
 
-    if material_type == "isotropic":
-        # Variables: E_x, nu_xy
-        E = E_x
-        nu = nu_xy
-        G = E / (2 * (1 + nu))
-        lam = E * nu / ((1 + nu) * (1 - 2 * nu))
-        mu = G
+    S[0, 0] = 1 / E_x
+    S[1, 1] = 1 / E_y
+    S[2, 2] = 1 / E_z
 
-        C = np.array([
-            [lam + 2*mu, lam,        lam,        0,     0,     0],
-            [lam,        lam + 2*mu, lam,        0,     0,     0],
-            [lam,        lam,        lam + 2*mu, 0,     0,     0],
-            [0,          0,          0,          mu,    0,     0],
-            [0,          0,          0,          0,     mu,    0],
-            [0,          0,          0,          0,     0,     mu]
-        ])
+    S[0, 1] = S[1, 0] = -nu_xy / E_x
+    S[1, 2] = S[2, 1] = -nu_yz / E_y
+    S[0, 2] = S[2, 0] = -nu_zx / E_z
 
-    elif material_type == "transversely_isotropic":
-        # Variables: E_x, E_z, nu_xy, nu_zx, G_xy, G_zx
-        # Assumes transverse isotropy about Z-axis
-        S = np.zeros((6, 6))
+    S[3, 3] = 1 / G_yz
+    S[4, 4] = 1 / G_zx
+    S[5, 5] = 1 / G_xy
 
-        S[0, 0] = S[1, 1] = 1 / E_x
-        S[2, 2] = 1 / E_z
-        S[0, 1] = S[1, 0] = -nu_xy / E_x
-        S[0, 2] = S[2, 0] = -nu_zx / E_z
-        S[1, 2] = S[2, 1] = -nu_zx / E_z
-        S[3, 3] = S[4, 4] = 1 / G_xy
-        S[5, 5] = 1 / G_zx
-
-        C = np.linalg.inv(S)
-
-    elif material_type == "orthotropic":
-        # Variables: E_x, E_z, E_y, nu_xy, nu_yz, nu_zx, G_xy, G_yz, G_zx
-        S = np.zeros((6, 6))
-
-        S[0, 0] = 1 / E_x
-        S[1, 1] = 1 / E_y
-        S[2, 2] = 1 / E_z
-
-        S[0, 1] = S[1, 0] = -nu_xy / E_x
-        S[1, 2] = S[2, 1] = -nu_yz / E_y
-        S[0, 2] = S[2, 0] = -nu_zx / E_z
-
-        S[3, 3] = 1 / G_yz
-        S[4, 4] = 1 / G_zx
-        S[5, 5] = 1 / G_xy
-
-        C = np.linalg.inv(S)
-
-    else:
-        raise ValueError("Invalid material_type. Choose 'isotropic', 'orthotropic', or 'transversely_isotropic'.")
+    C = np.linalg.inv(S)
 
     if normalize and E_x != 0:
         return C / E_x
