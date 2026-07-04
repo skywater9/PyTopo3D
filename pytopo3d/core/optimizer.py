@@ -25,8 +25,7 @@ from pytopo3d.utils.filter import HAS_CUPY, apply_filter, build_filter
 from pytopo3d.utils.logger import get_logger
 from pytopo3d.utils.oc_update import optimality_criteria_update
 from pytopo3d.utils.solver import get_solver
-from pytopo3d.utils.stiffness import lk_H8, make_C_matrix
-from pytopo3d.utils.part_evaluation import get_avg_displacement_vector, generate_B_matrices, build_element_stress_tensors, estimate_failure_force
+from pytopo3d.utils.stiffness import lk_H8
 from pytopo3d.visualization.display import display_3D
 
 logger = get_logger(__name__)
@@ -66,7 +65,6 @@ def top3d(
     save_history: bool = False,
     history_frequency: int = 10,
     use_gpu: bool = False,
-    output_displacement_range: Optional[Tuple[int,int,int,int,int,int]] = None,
     protected_zone_mask: Optional[np.ndarray] = None,
 ) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, Any]], Optional[np.ndarray], float]:
     # ─────────────────────── setup
@@ -111,7 +109,7 @@ def top3d(
         KE = lk_H8(elem_size=elem_size)
     else:
         KE = lk_H8(
-            *material_params[6:], # yield strengths not passed
+            *material_params[6:15], # pass only stiffness and Poisson ratios
             elem_size=elem_size
         )
         
@@ -150,7 +148,7 @@ def top3d(
         xPhys_gpu[obstacle_gpu] = 0.0
     else:
         x = np.full((nely, nelx, nelz), volfrac)
-        x_gpu[protected_gpu] = 1.0
+        x[protected_zone_mask] = 1.0
         x[obstacle_mask] = 0.0
         xPhys = (H * x.ravel(order="F") / Hs).reshape((nely, nelx, nelz), order="F")
         xPhys[obstacle_mask] = 0.0
@@ -299,44 +297,13 @@ def top3d(
         )
 
     # ─────────────────────── final output
-    output_displacement = None
+    failure_force = None
 
     if gpu:
         final_xPhys = cp.asnumpy(xPhys_gpu)
-
-        if output_displacement_range is not None:
-            output_displacement = get_avg_displacement_vector(
-                cp.asnumpy(U_gpu),
-                *output_displacement_range,
-                nelx,
-                nely,
-                nelz,
-            )
-
-        # Failure force estimation (gpu)
-        B_matrices = generate_B_matrices(nelx, nely, nelz, elem_size)
-        stress_tensors = build_element_stress_tensors(cp.asnumpy(U_gpu), edofMat, B_matrices, make_C_matrix(*material_params[6:]))
-
-        failure_force = estimate_failure_force(F_gpu, stress_tensors, *material_params[:6])
-
-    else: 
+    else:
         final_xPhys = xPhys
 
-        if output_displacement_range is not None:
-            output_displacement = get_avg_displacement_vector(
-                U,
-                *output_displacement_range,
-                nelx,
-                nely,
-                nelz,
-            )
-
-        # Failure force estimation
-        B_matrices = generate_B_matrices(nelx, nely, nelz, elem_size)
-        stress_tensors = build_element_stress_tensors(U, edofMat, B_matrices, make_C_matrix(*material_params[6:]))
-
-        failure_force = estimate_failure_force(F, stress_tensors, *material_params[:6])
-        
     if save_history:
-        return final_xPhys, history, output_displacement, failure_force
-    return final_xPhys, None, output_displacement, failure_force
+        return final_xPhys, history, None, failure_force
+    return final_xPhys, None, None, failure_force

@@ -111,9 +111,8 @@ def execute_optimization(
     logger: logging.Logger = None,
     combined_obstacle_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
-    output_displacement_range: Optional[Tuple[int,int,int,int,int,int]] = None,
     protected_zone_mask: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, Optional[Dict], Optional[np.ndarray], float, float]:
+) -> Tuple[np.ndarray, Optional[Dict], None, float, float]:
     """
     Run the topology optimization process.
 
@@ -181,26 +180,25 @@ def execute_optimization(
         save_history=create_animation,
         history_frequency=animation_frequency,
         use_gpu=use_gpu,
-        output_displacement_range=output_displacement_range,
         protected_zone_mask=protected_zone_mask,
     )
 
     # Check if we got history back
     if create_animation:
-        xPhys, history, output_displacement, failure_force = optimization_result
+        xPhys, history, _, _ = optimization_result
         if logger:
             logger.info(
                 f"Optimization history captured with {len(history['density_history'])} frames"
             )
     else:
-        xPhys, history, output_displacement, failure_force = optimization_result # temp fix
+        xPhys, history, _, _ = optimization_result
 
     end_time = time.time()
     run_time = end_time - start_time
     if logger:
         logger.debug(f"Optimization finished in {run_time:.2f} seconds")
 
-    return xPhys, history, output_displacement, failure_force, run_time
+    return xPhys, history, None, None, run_time
 
 
 def export_result_to_stl(

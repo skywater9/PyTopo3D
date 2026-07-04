@@ -33,3 +33,41 @@ force_field_2:
   F_x: 10000
   F_y: 0
   F_z: 0
+
+# Tensile test configuration: one end fixed, other end pulled
+# For 8mm width x 80mm length x 0.81mm thickness (nelx=8, nely=80, nelz=1)
+force_field_tensile:
+  x1: 0
+  x2: 8
+  y1: 79
+  y2: 80
+  z1: 0
+  z2: 1
+  F_x: 0
+  F_y: 1000
+  F_z: 0
+
+# Tensile test for FDM PLA specimen: 3mm x 15mm x 80mm
+# Layer lines in X, pulling in Y direction
+force_field_tensile_pla_3x15x80:
+  x1: 0
+  x2: 3
+  y1: 79
+  y2: 80
+  z1: 0
+  z2: 15
+  F_x: 0
+  F_y: 100
+  F_z: 0
+
+# Finer mesh version: nelx=6, nely=160, nelz=30
+force_field_tensile_pla_fine_6x160x30:
+  x1: 0
+  x2: 6
+  y1: 159
+  y2: 160
+  z1: 0
+  z2: 30
+  F_x: 0
+  F_y: 100
+  F_z: 0

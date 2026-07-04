@@ -68,19 +68,13 @@ def get_material_params(material_name: str):
     Returns
     -------
     material_properties
-        Tuple containing the material's mechanical properties
+        Tuple containing the material's stiffness and Poisson ratio parameters.
     """
     material = materials.get(material_name.lower())
     if material is None:
         raise ValueError(f"Material '{material_name}' not found.")
 
     material_properties = (
-        to_float(material.get("sigma_x_yield", None)),
-        to_float(material.get("sigma_y_yield", None)),
-        to_float(material.get("sigma_z_yield", None)),
-        to_float(material.get("tau_xy_yield", None)),
-        to_float(material.get("tau_yz_yield", None)),
-        to_float(material.get("tau_zx_yield", None)),
         to_float(material.get("E_x", None)),
         to_float(material.get("E_y", None)),
         to_float(material.get("E_z", None)),
@@ -166,26 +160,3 @@ def get_support_mask_params(support_mask_name: str):
     )
 
     return support_mask_params
-
-
-current_dir = Path(__file__).parent
-odr_path = current_dir.parent.parent / "config" / "output_displacement_ranges.yml"
-with open(odr_path, "r") as f:
-    output_displacement_ranges = yaml.safe_load(f)
-
-def get_output_displacement_range(output_displacement_range_name: str):
-
-    output_displacement_range = output_displacement_ranges.get(output_displacement_range_name.lower())
-    if output_displacement_range is None:
-        raise ValueError(f"Output displacement range '{output_displacement_range_name}' not found.")
-
-    odr_vals = (
-        output_displacement_range.get("x1"),
-        output_displacement_range.get("x2"),
-        output_displacement_range.get("y1"),
-        output_displacement_range.get("y2"),
-        output_displacement_range.get("z1"),
-        output_displacement_range.get("z2"),
-    )
-
-    return odr_vals

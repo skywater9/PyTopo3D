@@ -3,13 +3,6 @@
 # G_xy, G_yz, G_zx: Shear moduli (Pa)
 
 pla: # TODO get accurate values
-  sigma_x_yield: 30e6
-  sigma_y_yield: 30e6
-  sigma_z_yield: 30e6
-  tau_xy_yield: 20e6
-  tau_yz_yield: 20e6
-  tau_zx_yield: 20e6
-
   E_x: 45e6
   E_y: 45e6
   E_z: 25e6
@@ -21,13 +14,6 @@ pla: # TODO get accurate values
   nu_zx: 0.36
 
 steel:
-  sigma_x_yield: 215e6
-  sigma_y_yield: 215e6
-  sigma_z_yield: 215e6
-  tau_xy_yield: 215e6
-  tau_yz_yield: 215e6
-  tau_zx_yield: 215e6
-
   E_x: 200000e6
   E_y: 200000e6
   E_z: 200000e6
@@ -37,3 +23,27 @@ steel:
   nu_xy: 0.3
   nu_yz: 0.3
   nu_zx: 0.3
+
+aluminum_5052_h32:
+  E_x: 70e9
+  E_y: 70e9
+  E_z: 70e9
+  G_xy: 26e9
+  G_yz: 26e9
+  G_zx: 26e9
+  nu_xy: 0.33
+  nu_yz: 0.33
+  nu_zx: 0.33
+
+pla_fdm_anisotropic:
+  # FDM PLA with layer lines (X) perpendicular to pull (Y)
+  # Weakest: Y (perpendicular to layer lines), 2nd: Z (through-layer), Strongest: X (along fibers)
+  E_x: 3.8e9
+  E_y: 2.5e9
+  E_z: 2.0e9
+  G_xy: 1.5e9
+  G_yz: 1.0e9
+  G_zx: 1.5e9
+  nu_xy: 0.35
+  nu_yz: 0.40
+  nu_zx: 0.35

@@ -15,3 +15,11 @@ displacement_range_2:
   y2: 19
   z1: 1
   z2: 2
+
+displacement_range_tensile_pull:
+  x1: 0
+  x2: 8
+  y1: 79
+  y2: 80
+  z1: 0
+  z2: 1

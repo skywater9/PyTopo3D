@@ -38,8 +38,6 @@ def collect_metrics(
     run_time: float = 0.0,
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
-    output_displacement: Optional[np.ndarray] = None,
-    failure_force: float = None,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
@@ -69,8 +67,6 @@ def collect_metrics(
         run_time: Optimization runtime in seconds
         gif_path: Path to animation GIF if created
         stl_exported: Whether STL export was successful
-        output_displacement: displacement vector for selected nodes
-        failure_force: force magnitude required for failure
 
     Returns:
         Dictionary of metrics
@@ -119,14 +115,6 @@ def collect_metrics(
         metrics["stl_level"] = stl_level
         metrics["stl_smoothed"] = smooth_stl
         metrics["stl_smooth_iterations"] = smooth_iterations
-
-    if output_displacement is not None:
-        metrics["output_displacement_x"] = float(output_displacement[0])
-        metrics["output_displacement_y"] = float(output_displacement[1])
-        metrics["output_displacement_z"] = float(output_displacement[2])
-
-    if failure_force is not None:
-        metrics["failure_force"] = float(failure_force)
 
     return metrics
 
