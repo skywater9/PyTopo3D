@@ -8,47 +8,18 @@ support_mask_0:
   z1: 0
   z2: 1
 
-support_mask_1:
+tensile_test:
   x1: 0
-  x2: 15
+  x2: 30
   y1: 0
-  y2: 10
+  y2: 1
   z1: 0
-  z2: 1
+  z2: 4
 
-support_mask_2:
+cantilever_test:
   x1: 0
-  x2: 1
+  x2: 20
   y1: 0
   y2: 20
   z1: 0
-  z2: 20
-
-# Tensile test configuration: fixed at one end
-# For 8mm width x 80mm length x 0.81mm thickness (nelx=8, nely=80, nelz=1)
-support_mask_tensile:
-  x1: 0
-  x2: 8
-  y1: 0
-  y2: 1
-  z1: 0
   z2: 1
-
-# Tensile test for FDM PLA specimen: 3mm x 15mm x 80mm
-# Fixed at y=0 end
-support_mask_tensile_pla_3x15x80:
-  x1: 0
-  x2: 3
-  y1: 0
-  y2: 1
-  z1: 0
-  z2: 15
-
-# Finer mesh version: nelx=6, nely=160, nelz=30
-support_mask_tensile_pla_fine_6x160x30:
-  x1: 0
-  x2: 6
-  y1: 0
-  y2: 1
-  z1: 0
-  z2: 30

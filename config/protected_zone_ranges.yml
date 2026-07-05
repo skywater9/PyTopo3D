@@ -8,10 +8,36 @@ protected_zone_0:
   z1: 0
   z2: 1
 
-protected_zone_1:
+# Protected extra space on support side: 20 elements in y for 45x145x6 tensile setup
+tensile_support_face:
+  x1: 0
+  x2: 30
+  y1: 0
+  y2: 35
+  z1: 0
+  z2: 4
+
+# Protected extra space on load side: 20 elements in y for 45x145x6 tensile setup
+tensile_load_face:
+  x1: 0
+  x2: 30
+  y1: 105
+  y2: 140
+  z1: 0
+  z2: 4
+
+cantilever_support_face:
   x1: 0
   x2: 20
   y1: 0
-  y2: 16
+  y2: 20
   z1: 0
-  z2: 3
+  z2: 10
+
+cantilever_load_face:
+  x1: 15
+  x2: 20
+  y1: 0
+  y2: 20
+  z1: 50
+  z2: 60

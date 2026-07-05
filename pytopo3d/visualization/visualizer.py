@@ -92,11 +92,28 @@ def visualize_initial_setup(
             f"obstacle_array shape mismatch: expected {expected_shape}, got {obstacle_array.shape}"
         )
 
-    arrays_to_visualize = [obstacle_array, loads_array, constraints_array, protected_zone_array]
-    thresholds = [0.5, 0.5, 0.5, 0.5]
-    colors = ["yellow", "blue", "red", "green"]
-    labels = ["Obstacles", "Loads", "Constraints", "Protected Elements"]
-    alphas = [0.2, 0.9, 0.9, 0.2]  # Make obstacles transparent
+    arrays_to_visualize = [obstacle_array, loads_array, constraints_array]
+    thresholds = [0.5, 0.5, 0.5]
+    colors = ["yellow", "blue", "red"]
+    labels = ["Obstacles", "Loads", "Constraints"]
+    alphas = [0.2, 0.9, 0.9]  # Make obstacles transparent
+
+    # Protected zones can be very dense (e.g., large interface blocks) and make
+    # voxel rendering slow in matplotlib. Keep optimization behavior unchanged,
+    # but skip protected-zone drawing in the initial view when too dense.
+    protected_count = int(np.count_nonzero(protected_zone_array > 0.5))
+    max_protected_viz_voxels = 3000
+    if protected_count > 0 and protected_count <= max_protected_viz_voxels:
+        arrays_to_visualize.append(protected_zone_array)
+        thresholds.append(0.5)
+        colors.append("green")
+        labels.append("Protected Elements")
+        alphas.append(0.2)
+    elif protected_count > max_protected_viz_voxels and logger:
+        logger.info(
+            "Skipping protected-zone overlay in initial visualization "
+            f"(voxels={protected_count}, limit={max_protected_viz_voxels})"
+        )
 
     boundary_viz_path = create_visualization(
         arrays=arrays_to_visualize,

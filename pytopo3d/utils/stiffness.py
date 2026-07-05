@@ -122,14 +122,14 @@ def lk_H8(
 
 def make_C_matrix(
     E_x: float,
-    E_y: float,
-    E_z: float,
-    G_xy: float,
-    G_yz: float,
-    G_zx: float,
-    nu_xy: float,
-    nu_yz: float,
-    nu_zx: float,
+    E_y: float = None,
+    E_z: float = None,
+    G_xy: float = 0.4,
+    G_yz: float = None,
+    G_zx: float = None,
+    nu_xy: float = 0.3,
+    nu_yz: float = None,
+    nu_zx: float = None,
     normalize: bool = False
 ) -> np.ndarray:
     """
@@ -151,6 +151,19 @@ def make_C_matrix(
     C : ndarray
         6x6 stiffness matrix in Voigt notation.
     """
+
+    if E_y is None:
+        E_y = E_x
+    if E_z is None:
+        E_z = E_x
+    if G_yz is None:
+        G_yz = G_xy
+    if G_zx is None:
+        G_zx = G_xy
+    if nu_yz is None:
+        nu_yz = nu_xy
+    if nu_zx is None:
+        nu_zx = nu_xy
 
     S = np.zeros((6, 6))
 

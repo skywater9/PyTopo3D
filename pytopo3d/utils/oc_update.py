@@ -60,11 +60,20 @@ def optimality_criteria_update(
         Hs_gpu = Hs if isinstance(Hs, cp.ndarray) else cp.asarray(Hs)
         xnew_gpu = x_gpu.copy()
 
+        # Normalize sensitivity ratio so OC bisection remains stable even when
+        # compliance sensitivities are very small in absolute magnitude.
+        ratio_gpu = -dc_gpu / cp.maximum(dv_gpu, 1e-18)
+        ratio_gpu = cp.maximum(ratio_gpu, 0.0)
+        ratio_scale_gpu = cp.max(ratio_gpu)
+        if float(ratio_scale_gpu) > 0.0:
+            ratio_gpu = ratio_gpu / ratio_scale_gpu
+        else:
+            ratio_gpu = cp.ones_like(ratio_gpu)
+
         while (l2 - l1) / (l1 + l2) > 1e-3:
             lmid = 0.5 * (l2 + l1)
-            update_term = -dc_gpu / (dv_gpu * lmid)
+            update_term = ratio_gpu / lmid
             update_term[dv_gpu < 1e-9] = 0.0
-            update_term[update_term < 0] = 0.0
 
             x_candidate_gpu = x_gpu * cp.sqrt(update_term)
             x_candidate_gpu = cp.clip(x_candidate_gpu, cp.maximum(0.0, x_gpu - move), cp.minimum(1.0, x_gpu + move))
@@ -91,11 +100,20 @@ def optimality_criteria_update(
         xnew = x.copy()
         free_mask = (~obstacle_mask) & (~protected_zone_mask)  # <<< MODIFIED
 
+        # Normalize sensitivity ratio so OC bisection remains stable even when
+        # compliance sensitivities are very small in absolute magnitude.
+        ratio = -dc / np.maximum(dv, 1e-18)
+        ratio = np.maximum(ratio, 0.0)
+        ratio_scale = np.max(ratio)
+        if ratio_scale > 0.0:
+            ratio = ratio / ratio_scale
+        else:
+            ratio = np.ones_like(ratio)
+
         while (l2 - l1) / (l1 + l2) > 1e-3:
             lmid = 0.5 * (l2 + l1)
-            update_term = -dc / (dv * lmid)
+            update_term = ratio / lmid
             update_term[dv < 1e-9] = 0.0
-            update_term[update_term < 0] = 0.0
 
             x_candidate = x * np.sqrt(update_term)
             x_candidate = np.clip(x_candidate, np.maximum(0.0, x - move), np.minimum(1.0, x + move))

@@ -109,7 +109,7 @@ def top3d(
         KE = lk_H8(elem_size=elem_size)
     else:
         KE = lk_H8(
-            *material_params[6:15], # pass only stiffness and Poisson ratios
+            *material_params,
             elem_size=elem_size
         )
         
@@ -291,7 +291,7 @@ def top3d(
             history["compliance_history"].append(c)
 
         logger.info(
-            f"Iter {loop:4d}: Obj={c:9.4f}, ΔObj={c_delta:9.4f}, "
+            f"Iter {loop:4d}: Obj={c:11.4e}, ΔObj={c_delta:11.4e}, "
             f"Vol={current_vol:6.3f}, change={change:6.3f}, "
             f"time={iter_t:5.2f}s"
         )
