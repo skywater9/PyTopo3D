@@ -19,6 +19,7 @@ def collect_metrics(
     rmin: float,
     disp_thres: float,
     material_preset: str = None,
+    material_orientation_xyz: str = None,
     force_field_preset: str = None,
     support_mask_preset: str = None,
     elem_size: float = 0.01, # 1 cm 
@@ -82,6 +83,7 @@ def collect_metrics(
         "rmin": rmin,
         "disp_thres": disp_thres,
         "material_preset": material_preset,
+        "material_orientation_xyz": material_orientation_xyz,
         "force_field_preset": force_field_preset,
         "suport_mask_preset": support_mask_preset,
         "elem_size": elem_size,

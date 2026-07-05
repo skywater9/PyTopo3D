@@ -98,6 +98,15 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Selected material preset",
     )
     variable_experiment_group.add_argument(
+        "--material-orientation-xyz",
+        type=str,
+        default=None,
+        help=(
+            "Optional 3-letter axis permutation for material directions (x/y/z, no repeats). "
+            "Example: zxy maps material x->global z, y->global x, z->global y"
+        ),
+    )
+    variable_experiment_group.add_argument(
         "--force-field-preset",
         type=str,
         default=None,

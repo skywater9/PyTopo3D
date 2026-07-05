@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0.."
+
 .venv\Scripts\python.exe main.py ^
   --nelx 20 ^
   --nely 20 ^
@@ -11,8 +12,8 @@ cd /d "%~dp0.."
   --maxloop 2000 ^
   --export-stl ^
   --force-field-preset cantilever_test ^
-  --material-preset pla_isotropic ^
+  --material-preset pla_anisotropic ^
   --support-mask-preset cantilever_test ^
   --protected-zones cantilever_support_face cantilever_load_face ^
-  --experiment-name cantilever_test_iso_20x20x60 ^
+  --experiment-name cantilever_test_aniso_20x20x60 ^
   --description "Cantilever test with support on one end and force on the opposite end"

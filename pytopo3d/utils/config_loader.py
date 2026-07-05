@@ -5,6 +5,7 @@ This module contains functions that use user made presets to build parameters
 """
 
 from pathlib import Path
+from typing import Optional, Sequence, Tuple
 import yaml
 
 current_dir = Path(__file__).parent
@@ -87,6 +88,75 @@ def get_material_params(material_name: str):
     )
 
     return material_properties
+
+
+def parse_material_orientation_xyz(material_orientation_xyz: Optional[str]) -> Optional[str]:
+    """
+    Validate and normalize a material orientation mapping string.
+
+    Parameters
+    ----------
+    material_orientation_xyz
+        String containing exactly one each of x, y, z (axis permutation), or None.
+
+    Returns
+    -------
+    Optional[str]
+        Normalized lowercase orientation string, or None if no value was provided.
+    """
+    if material_orientation_xyz is None:
+        return None
+
+    orientation = material_orientation_xyz.strip().lower()
+    if len(orientation) != 3 or any(axis not in "xyz" for axis in orientation):
+        raise ValueError(
+            "material_orientation_xyz must be exactly 3 letters using only x, y, z "
+            "(for example: xyz, zxy)."
+        )
+    if sorted(orientation) != ["x", "y", "z"]:
+        raise ValueError(
+            "material_orientation_xyz must be a permutation of xyz with no repeated letters "
+            "(allowed: xyz, xzy, yxz, yzx, zxy, zyx)."
+        )
+
+    return orientation
+
+
+def apply_material_orientation(
+    material_params: Sequence[Optional[float]],
+    material_orientation_xyz: Optional[str],
+) -> Tuple[Optional[float], ...]:
+    """
+    Remap material properties onto global axes.
+
+    The mapping string is interpreted as:
+    - char 0: global axis receiving material x-direction values
+    - char 1: global axis receiving material y-direction values
+    - char 2: global axis receiving material z-direction values
+
+    For shear/Poisson directional pairs, axes are grouped as:
+    xy -> x, yz -> y, zx -> z.
+    """
+    orientation = parse_material_orientation_xyz(material_orientation_xyz)
+    if orientation is None:
+        return tuple(material_params)
+
+    if len(material_params) != 9:
+        raise ValueError("material_params must contain 9 values in preset order.")
+
+    axis_to_idx = {"x": 0, "y": 1, "z": 2}
+    mapped = list(material_params)
+
+    # E_x, E_y, E_z: map principal axes based on orientation string.
+    for src_axis_idx, dst_axis in enumerate(orientation):
+        mapped[axis_to_idx[dst_axis]] = material_params[src_axis_idx]
+
+    # G_xy/G_yz/G_zx and nu_xy/nu_yz/nu_zx are treated as x/y/z groups.
+    for src_axis_idx, dst_axis in enumerate(orientation):
+        mapped[3 + axis_to_idx[dst_axis]] = material_params[3 + src_axis_idx]
+        mapped[6 + axis_to_idx[dst_axis]] = material_params[6 + src_axis_idx]
+
+    return tuple(mapped)
 
 
 current_dir = Path(__file__).parent

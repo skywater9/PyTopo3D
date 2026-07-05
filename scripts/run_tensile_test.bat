@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0.."
+
 .venv\Scripts\python.exe main.py ^
   --nelx 30 ^
   --nely 140 ^
@@ -11,8 +12,8 @@ cd /d "%~dp0.."
   --maxloop 2000 ^
   --export-stl ^
   --force-field-preset tensile_test ^
-  --material-preset pla_isotropic ^
+  --material-preset pla_extra_anisotropic ^
   --support-mask-preset tensile_test ^
   --protected-zones tensile_support_face tensile_load_face ^
-  --experiment-name tensile_test_iso_30x140x4 ^
+  --experiment-name tensile_test_xaniso_30x140x4 ^
   --description "Tensile test with support on one end and force on the opposite end"

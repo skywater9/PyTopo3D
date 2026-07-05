@@ -16,7 +16,13 @@ from pytopo3d.runners.experiment import (
     setup_experiment,
 )
 from pytopo3d.utils.assembly import build_force_field, build_force_vector, build_support_mask, build_supports
-from pytopo3d.utils.config_loader import get_material_params, get_force_field_params, get_support_mask_params
+from pytopo3d.utils.config_loader import (
+    apply_material_orientation,
+    get_force_field_params,
+    get_material_params,
+    get_support_mask_params,
+    parse_material_orientation_xyz,
+)
 from pytopo3d.utils.boundary import create_bc_visualization_arrays, create_bc_visualization_arrays_from_masks
 from pytopo3d.utils.metrics import collect_metrics
 from pytopo3d.visualization.visualizer import (
@@ -76,10 +82,28 @@ def main():
 
         # set material parameters/preset
         material_preset = args.material_preset
+        material_orientation_xyz = parse_material_orientation_xyz(
+            getattr(args, "material_orientation_xyz", None)
+        )
         if material_preset is not None:
             material_params = get_material_params(material_preset)
+            material_params = apply_material_orientation(
+                material_params,
+                material_orientation_xyz,
+            )
+            if material_orientation_xyz is not None:
+                logger.info(
+                    "Applied material orientation mapping (material x/y/z -> global %s/%s/%s)",
+                    material_orientation_xyz[0],
+                    material_orientation_xyz[1],
+                    material_orientation_xyz[2],
+                )
         else:
             material_params = None
+            if material_orientation_xyz is not None:
+                logger.warning(
+                    "--material-orientation-xyz was provided without --material-preset; orientation mapping is ignored."
+                )
 
         # --- Build Boundary Conditions ---
         force_field_preset = args.force_field_preset
@@ -241,6 +265,7 @@ def main():
             penal=args.penal,
             rmin=args.rmin,
             material_preset=args.material_preset,
+            material_orientation_xyz=material_orientation_xyz,
             force_field_preset=args.force_field_preset,
             support_mask_preset=args.support_mask_preset,
             elem_size=args.elem_size,
