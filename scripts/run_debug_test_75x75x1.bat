@@ -16,5 +16,6 @@ cd /d "%~dp0.."
   --material-orientation-xyz xzy ^
   --support-mask-preset debug_support_mask_75x75x1 ^
   --protected-zones debug_protected_zone_75x75x1 ^
+  --eval-material-presets pla_isotropic pla_anisotropic pla_xanisotropic ^
   --experiment-name debug_test_iso_75x75x1 ^
   --description "Debug test with support on one end and force on the opposite end"

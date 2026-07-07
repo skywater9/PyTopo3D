@@ -9,6 +9,7 @@ import sys
 import numpy as np
 
 from pytopo3d.cli.parser import parse_args
+from pytopo3d.core.optimizer import evaluate_fixed_geometry_compliance
 from pytopo3d.preprocessing.geometry import load_geometry_data
 from pytopo3d.runners.experiment import (
     execute_optimization,
@@ -105,6 +106,26 @@ def main():
                     "--material-orientation-xyz was provided without --material-preset; orientation mapping is ignored."
                 )
 
+        eval_material_orientation_xyz = parse_material_orientation_xyz(
+            getattr(args, "eval_material_orientation_xyz", None)
+        )
+        if eval_material_orientation_xyz is None:
+            eval_material_orientation_xyz = material_orientation_xyz
+
+        eval_material_queue = []
+        if getattr(args, "eval_material_presets", None):
+            if material_preset is not None:
+                eval_material_queue.append(material_preset)
+            eval_material_queue.extend(args.eval_material_presets)
+            deduped = []
+            seen = set()
+            for preset_name in eval_material_queue:
+                key = preset_name.lower()
+                if key not in seen:
+                    deduped.append(preset_name)
+                    seen.add(key)
+            eval_material_queue = deduped
+
         # --- Build Boundary Conditions ---
         force_field_preset = args.force_field_preset
         if force_field_preset is not None:
@@ -193,6 +214,66 @@ def main():
             use_gpu=args.gpu,
             protected_zone_mask=protected_zone_mask
         )
+
+        final_voxel_eval = None
+        if eval_material_queue:
+            final_voxel_eval = []
+            for eval_material_preset in eval_material_queue:
+                eval_material_params = get_material_params(eval_material_preset)
+                eval_material_params = apply_material_orientation(
+                    eval_material_params,
+                    eval_material_orientation_xyz,
+                )
+                eval_compliance = evaluate_fixed_geometry_compliance(
+                    xPhys=xPhys,
+                    penal=args.penal,
+                    material_params=eval_material_params,
+                    elem_size=args.elem_size,
+                    force_field=force_field,
+                    support_mask=support_mask,
+                    obstacle_mask=combined_obstacle_mask,
+                    protected_zone_mask=protected_zone_mask,
+                    use_gpu=args.gpu,
+                )
+                final_voxel_eval.append(
+                    {
+                        "material_preset": eval_material_preset,
+                        "material_orientation_xyz": eval_material_orientation_xyz,
+                        "compliance": eval_compliance,
+                    }
+                )
+
+            baseline_compliance = None
+            if material_preset is not None:
+                for row in final_voxel_eval:
+                    if row["material_preset"].lower() == material_preset.lower():
+                        baseline_compliance = row["compliance"]
+                        break
+            if baseline_compliance is None and final_compliance is not None:
+                baseline_compliance = final_compliance
+
+            if baseline_compliance is not None and baseline_compliance != 0.0:
+                for row in final_voxel_eval:
+                    row["relative_to_baseline"] = row["compliance"] / baseline_compliance
+
+            sorted_rows = sorted(final_voxel_eval, key=lambda row: row["compliance"])
+            for rank, row in enumerate(sorted_rows, start=1):
+                row["rank"] = rank
+
+            logger.info(
+                "Final voxel cross-material evaluation (lower compliance means stiffer):"
+            )
+            for row in sorted_rows:
+                ratio_text = ""
+                if "relative_to_baseline" in row:
+                    ratio_text = f", ratio={row['relative_to_baseline']:.4f}"
+                logger.info(
+                    "  rank=%d, material=%s, compliance=%.6e%s",
+                    row["rank"],
+                    row["material_preset"],
+                    row["compliance"],
+                    ratio_text,
+                )
 
         # Save the result to the experiment directory
 
@@ -285,6 +366,7 @@ def main():
             combined_obstacle_mask=combined_obstacle_mask,
             run_time=run_time,
             final_compliance=final_compliance,
+            final_voxel_eval=final_voxel_eval,
             gif_path=gif_path,
             stl_exported=stl_exported,
         )

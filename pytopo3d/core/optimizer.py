@@ -46,6 +46,100 @@ def _make_scatter_map(i_full, j_full, ndof):
     return i_uniq, j_uniq, dup2uniq
 
 
+def evaluate_fixed_geometry_compliance(
+    xPhys: np.ndarray,
+    penal: float,
+    material_params: Optional[Tuple[float, ...]] = None,
+    elem_size: float = 0.01,
+    force_field: Optional[np.ndarray] = None,
+    support_mask: Optional[np.ndarray] = None,
+    obstacle_mask: Optional[np.ndarray] = None,
+    protected_zone_mask: Optional[np.ndarray] = None,
+    use_gpu: bool = False,
+) -> float:
+    """
+    Evaluate compliance for a fixed voxel geometry under given material/BC settings.
+
+    This performs a single FE solve with no OC update and returns the same
+    objective definition used in optimization.
+    """
+    nely, nelx, nelz = xPhys.shape
+    ndof = 3 * (nelx + 1) * (nely + 1) * (nelz + 1)
+
+    obstacle_mask = (
+        np.zeros((nely, nelx, nelz), dtype=bool)
+        if obstacle_mask is None
+        else obstacle_mask
+    )
+    protected_zone_mask = (
+        np.zeros((nely, nelx, nelz), dtype=bool)
+        if protected_zone_mask is None
+        else protected_zone_mask
+    )
+
+    # Ensure fixed regions remain valid for evaluation.
+    x_eval = np.array(xPhys, dtype=float, copy=True)
+    x_eval[obstacle_mask] = 0.0
+    x_eval[protected_zone_mask] = 1.0
+
+    E0, Emin = 1.0, 1e-9
+
+    F = build_force_vector(nelx, nely, nelz, ndof, force_field)
+    freedofs0, _ = build_supports(nelx, nely, nelz, ndof, support_mask)
+
+    if material_params is None:
+        KE = lk_H8(elem_size=elem_size)
+    else:
+        KE = lk_H8(*material_params, elem_size=elem_size)
+
+    edofMat, iK, jK = build_edof(nelx, nely, nelz)
+    iK0, jK0 = iK - 1, jK - 1
+
+    solver_func, _ = get_solver(use_gpu)
+
+    i_unique, j_unique, dup2uniq = _make_scatter_map(iK0, jK0, ndof)
+
+    if HAS_CUPY and use_gpu:
+        KE_gpu = cp.asarray(KE)
+        stiff_gpu = Emin + (cp.asarray(x_eval).ravel(order="F") ** penal) * (E0 - Emin)
+        elem_vals_gpu = cp.kron(stiff_gpu, KE_gpu.ravel())
+
+        K_gpu = cusp.csr_matrix(
+            (cp.zeros(len(i_unique)), (cp.asarray(i_unique), cp.asarray(j_unique))),
+            shape=(ndof, ndof),
+        )
+        cp.add.at(K_gpu.data, cp.asarray(dup2uniq), elem_vals_gpu)
+
+        F_gpu = cp.asarray(F)
+        freedofs0_gpu = cp.asarray(freedofs0)
+
+        Kff_gpu = K_gpu[freedofs0_gpu, :][:, freedofs0_gpu]
+        Uf_gpu = solver_func(Kff_gpu, F_gpu[freedofs0_gpu])
+        U_gpu = cp.zeros(ndof)
+        U_gpu[freedofs0_gpu] = Uf_gpu
+
+        ce_flat_gpu = element_compliance(U_gpu, cp.asarray(edofMat), KE_gpu)
+        ce_gpu = ce_flat_gpu.reshape(nely, nelx, nelz, order="F")
+        c_gpu = cp.sum((Emin + cp.asarray(x_eval) ** penal * (E0 - Emin)) * ce_gpu)
+        return float(c_gpu.item())
+
+    stiff = Emin + (x_eval.ravel(order="F") ** penal) * (E0 - Emin)
+    elem_vals = np.kron(stiff, KE.ravel())
+
+    K = sp.csr_matrix((np.zeros(len(i_unique)), (i_unique, j_unique)), shape=(ndof, ndof))
+    np.add.at(K.data, dup2uniq, elem_vals)
+
+    Kff = K[freedofs0, :][:, freedofs0]
+    Uf = solver_func(Kff, F[freedofs0])
+    U = np.zeros(ndof)
+    U[freedofs0] = Uf
+
+    ce_flat = element_compliance(U, edofMat, KE)
+    ce = ce_flat.reshape(nely, nelx, nelz, order="F")
+    c = ((Emin + x_eval ** penal * (E0 - Emin)) * ce).sum()
+    return float(c)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 def top3d(
     nelx: int,
@@ -99,6 +193,7 @@ def top3d(
         if save_history
         else None
     )
+
 
     # Force / supports
     F = build_force_vector(nelx, nely, nelz, ndof, force_field)
@@ -168,6 +263,7 @@ def top3d(
 
     # ─────────────────────── main loop
     loop, change, c_prev = 0, 1.0, np.inf
+    c = np.nan
     if save_history:
         history_frequency = history_frequency
         if gpu:
@@ -304,6 +400,20 @@ def top3d(
     else:
         final_xPhys = xPhys
 
+    # Re-evaluate compliance on the returned final geometry so the reported
+    # final objective matches the actual exported/returned design state.
+    final_compliance = evaluate_fixed_geometry_compliance(
+        xPhys=final_xPhys,
+        penal=penal,
+        material_params=material_params,
+        elem_size=elem_size,
+        force_field=force_field,
+        support_mask=support_mask,
+        obstacle_mask=obstacle_mask,
+        protected_zone_mask=protected_zone_mask,
+        use_gpu=use_gpu,
+    )
+
     if save_history:
-        return final_xPhys, history, None, failure_force
-    return final_xPhys, None, None, failure_force
+        return final_xPhys, history, final_compliance, failure_force
+    return final_xPhys, None, final_compliance, failure_force

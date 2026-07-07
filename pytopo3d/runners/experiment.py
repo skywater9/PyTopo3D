@@ -112,7 +112,8 @@ def execute_optimization(
     combined_obstacle_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
     protected_zone_mask: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, Optional[Dict], None, float, float]:
+) -> Tuple[np.ndarray, Optional[Dict], float, float, float]:
+
     """
     Run the topology optimization process.
 

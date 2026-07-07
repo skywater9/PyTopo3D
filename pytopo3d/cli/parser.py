@@ -118,6 +118,25 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         help="Selected support mask preset",
     )
+    variable_experiment_group.add_argument(
+        "--eval-material-presets",
+        nargs="+",
+        type=str,
+        default=None,
+        help=(
+            "Optional material presets used for debug final voxel evaluation. "
+            "The optimized xPhys is re-evaluated under each listed material."
+        ),
+    )
+    variable_experiment_group.add_argument(
+        "--eval-material-orientation-xyz",
+        type=str,
+        default=None,
+        help=(
+            "Optional orientation mapping for eval materials (x/y/z permutation). "
+            "Defaults to --material-orientation-xyz when omitted."
+        ),
+    )
 
     # Performance parameters
     performance_group = parser.add_argument_group("Performance parameters")

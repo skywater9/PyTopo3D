@@ -5,7 +5,7 @@ This module provides functions for collecting and reporting metrics from
 topology optimization runs.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -38,6 +38,7 @@ def collect_metrics(
     combined_obstacle_mask: np.ndarray = None,
     run_time: float = 0.0,
     final_compliance: Optional[float] = None,
+    final_voxel_eval: Optional[List[Dict[str, Any]]] = None,
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
 ) -> Dict[str, Any]:
@@ -68,6 +69,7 @@ def collect_metrics(
         combined_obstacle_mask: Combined obstacle and design space mask
         run_time: Optimization runtime in seconds
         final_compliance: Final compliance/objective value from the optimizer
+        final_voxel_eval: Optional list of fixed-geometry evaluations under alternate materials
         gif_path: Path to animation GIF if created
         stl_exported: Whether STL export was successful
 
@@ -97,6 +99,8 @@ def collect_metrics(
 
     if final_compliance is not None:
         metrics["final_compliance"] = final_compliance
+    if final_voxel_eval:
+        metrics["final_voxel_eval"] = final_voxel_eval
 
     # Add obstacle info to metrics
     if obstacle_config:
