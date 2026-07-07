@@ -135,7 +135,8 @@ def execute_optimization(
         use_gpu: Whether to use GPU acceleration if available
 
     Returns:
-        Tuple containing optimization result, history (if saved), and runtime in seconds
+        Tuple containing optimization result, history (if saved), final compliance,
+        failure metric, and runtime in seconds
     """
     # Run the optimization with timing
     if logger:
@@ -185,20 +186,20 @@ def execute_optimization(
 
     # Check if we got history back
     if create_animation:
-        xPhys, history, _, _ = optimization_result
+        xPhys, history, final_compliance, failure_force = optimization_result
         if logger:
             logger.info(
                 f"Optimization history captured with {len(history['density_history'])} frames"
             )
     else:
-        xPhys, history, _, _ = optimization_result
+        xPhys, history, final_compliance, failure_force = optimization_result
 
     end_time = time.time()
     run_time = end_time - start_time
     if logger:
         logger.debug(f"Optimization finished in {run_time:.2f} seconds")
 
-    return xPhys, history, None, None, run_time
+    return xPhys, history, final_compliance, failure_force, run_time
 
 
 def export_result_to_stl(

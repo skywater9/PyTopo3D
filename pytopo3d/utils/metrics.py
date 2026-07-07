@@ -37,6 +37,7 @@ def collect_metrics(
     obstacle_mask: np.ndarray = None,
     combined_obstacle_mask: np.ndarray = None,
     run_time: float = 0.0,
+    final_compliance: Optional[float] = None,
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
 ) -> Dict[str, Any]:
@@ -66,6 +67,7 @@ def collect_metrics(
         obstacle_mask: Obstacle mask
         combined_obstacle_mask: Combined obstacle and design space mask
         run_time: Optimization runtime in seconds
+        final_compliance: Final compliance/objective value from the optimizer
         gif_path: Path to animation GIF if created
         stl_exported: Whether STL export was successful
 
@@ -92,6 +94,9 @@ def collect_metrics(
         "runtime_seconds": run_time,
         "has_obstacles": obstacle_config is not None,
     }
+
+    if final_compliance is not None:
+        metrics["final_compliance"] = final_compliance
 
     # Add obstacle info to metrics
     if obstacle_config:

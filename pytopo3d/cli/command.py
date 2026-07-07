@@ -89,7 +89,7 @@ def main(args: Optional[List[str]] = None) -> int:
         )
 
         # Run the optimization
-        xPhys, history, run_time = execute_optimization(
+        xPhys, history, final_compliance, _, run_time = execute_optimization(
             nelx=parsed_args.nelx,
             nely=parsed_args.nely,
             nelz=parsed_args.nelz,
@@ -178,6 +178,7 @@ def main(args: Optional[List[str]] = None) -> int:
             obstacle_mask=obstacle_mask,
             combined_obstacle_mask=combined_obstacle_mask,
             run_time=run_time,
+            final_compliance=final_compliance,
             gif_path=gif_path,
             stl_exported=stl_exported,
         )
