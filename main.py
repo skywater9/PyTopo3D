@@ -172,7 +172,7 @@ def main():
         )
 
         # Run the optimization - Passing force_field and support_mask
-        xPhys, history, _, failure_force, run_time = execute_optimization(
+        xPhys, history, final_compliance, failure_force, run_time = execute_optimization(
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
@@ -284,6 +284,7 @@ def main():
             obstacle_mask=obstacle_mask,
             combined_obstacle_mask=combined_obstacle_mask,
             run_time=run_time,
+            final_compliance=final_compliance,
             gif_path=gif_path,
             stl_exported=stl_exported,
         )

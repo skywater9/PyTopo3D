@@ -41,3 +41,19 @@ cantilever_load_face:
   y2: 20
   z1: 50
   z2: 60
+
+debug_protected_zone_50x50x2:
+  x1: 0
+  x2: 50
+  y1: 0
+  y2: 6
+  z1: 0
+  z2: 2
+
+debug_protected_zone_75x75x1:
+  x1: 0
+  x2: 75
+  y1: 0
+  y2: 6
+  z1: 0
+  z2: 1
