@@ -286,6 +286,92 @@ def main():
         xPhys_union = xPhys.copy()
         xPhys_union[union_mask] = 1.0
 
+        # Binary evaluation mirrors the STL threshold exactly so the reported
+        # compliance matches the pre-smoothing binary voxel behavior.
+        binary_eval_level = float(getattr(args, "stl_level", 0.5))
+
+        if eval_material_queue:
+            binary_eval_material_queue = list(eval_material_queue)
+            binary_eval_orientation = eval_material_orientation_xyz
+        elif material_preset is not None:
+            binary_eval_material_queue = [material_preset]
+            binary_eval_orientation = material_orientation_xyz
+        else:
+            binary_eval_material_queue = [None]
+            binary_eval_orientation = material_orientation_xyz
+
+        final_binary_voxel_eval = []
+        x_binary = (xPhys_union >= binary_eval_level).astype(float)
+        voxel_fill_fraction = float(np.mean(x_binary))
+
+        for eval_material_preset in binary_eval_material_queue:
+            if eval_material_preset is None:
+                eval_material_params = material_params
+                eval_material_name = "optimizer_material"
+            else:
+                eval_material_params = get_material_params(eval_material_preset)
+                eval_material_params = apply_material_orientation(
+                    eval_material_params,
+                    binary_eval_orientation,
+                )
+                eval_material_name = eval_material_preset
+
+            eval_binary_compliance = evaluate_fixed_geometry_compliance(
+                xPhys=x_binary,
+                penal=args.penal,
+                material_params=eval_material_params,
+                elem_size=args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                use_gpu=args.gpu,
+            )
+
+            final_binary_voxel_eval.append(
+                {
+                    "material_preset": eval_material_name,
+                    "material_orientation_xyz": binary_eval_orientation,
+                    "voxel_fill_fraction": voxel_fill_fraction,
+                    "compliance": eval_binary_compliance,
+                }
+            )
+
+        baseline_row = None
+        if material_preset is not None:
+            for row in final_binary_voxel_eval:
+                if row["material_preset"].lower() == material_preset.lower():
+                    baseline_row = row
+                    break
+        if baseline_row is None and final_binary_voxel_eval:
+            baseline_row = final_binary_voxel_eval[0]
+
+        if baseline_row is not None and baseline_row["compliance"] != 0.0:
+            baseline_compliance = baseline_row["compliance"]
+            for row in final_binary_voxel_eval:
+                row["relative_to_baseline"] = row["compliance"] / baseline_compliance
+
+        sorted_rows = sorted(final_binary_voxel_eval, key=lambda row: row["compliance"])
+        for rank, row in enumerate(sorted_rows, start=1):
+            row["rank"] = rank
+
+        logger.info(
+            "Binary voxel evaluation at STL level=%.3f (lower compliance means stiffer):",
+            binary_eval_level,
+        )
+        for row in sorted_rows:
+            ratio_text = ""
+            if "relative_to_baseline" in row:
+                ratio_text = f", ratio={row['relative_to_baseline']:.4f}"
+            logger.info(
+                "  rank=%d, material=%s, compliance=%.6e, fill=%.4f%s",
+                row["rank"],
+                row["material_preset"],
+                row["compliance"],
+                row["voxel_fill_fraction"],
+                ratio_text,
+            )
+
         result_path = results_mgr.save_result(xPhys_union, "optimized_design.npy")
         logger.debug(f"Optimization result saved to {result_path}")
 
@@ -367,6 +453,7 @@ def main():
             run_time=run_time,
             final_compliance=final_compliance,
             final_voxel_eval=final_voxel_eval,
+            final_binary_voxel_eval=final_binary_voxel_eval,
             gif_path=gif_path,
             stl_exported=stl_exported,
         )

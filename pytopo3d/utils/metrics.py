@@ -39,6 +39,7 @@ def collect_metrics(
     run_time: float = 0.0,
     final_compliance: Optional[float] = None,
     final_voxel_eval: Optional[List[Dict[str, Any]]] = None,
+    final_binary_voxel_eval: Optional[List[Dict[str, Any]]] = None,
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
 ) -> Dict[str, Any]:
@@ -70,6 +71,8 @@ def collect_metrics(
         run_time: Optimization runtime in seconds
         final_compliance: Final compliance/objective value from the optimizer
         final_voxel_eval: Optional list of fixed-geometry evaluations under alternate materials
+        final_binary_voxel_eval: Optional list of thresholded binary fixed-geometry
+            evaluations under one or more materials
         gif_path: Path to animation GIF if created
         stl_exported: Whether STL export was successful
 
@@ -101,6 +104,8 @@ def collect_metrics(
         metrics["final_compliance"] = final_compliance
     if final_voxel_eval:
         metrics["final_voxel_eval"] = final_voxel_eval
+    if final_binary_voxel_eval:
+        metrics["final_binary_voxel_eval"] = final_binary_voxel_eval
 
     # Add obstacle info to metrics
     if obstacle_config:
