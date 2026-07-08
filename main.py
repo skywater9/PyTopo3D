@@ -6,6 +6,7 @@ This script provides a command-line interface to run the topology optimization.
 """
 
 import sys
+import time
 import numpy as np
 
 from pytopo3d.cli.parser import parse_args
@@ -196,27 +197,37 @@ def main():
         )
 
         # Run the optimization - Passing force_field and support_mask
-        xPhys, history, final_compliance, failure_force, run_time = execute_optimization(
-            nelx=args.nelx,
-            nely=args.nely,
-            nelz=args.nelz,
-            volfrac=args.volfrac,
-            penal=args.penal,
-            rmin=args.rmin,
-            disp_thres=args.disp_thres,
-            elem_size=args.elem_size,
-            material_params=material_params,
-            force_field=force_field,
-            support_mask=support_mask,
-            tolx=getattr(args, "tolx", 0.01),
-            maxloop=getattr(args, "maxloop", 2000),
-            create_animation=getattr(args, "create_animation", False),
-            animation_frequency=getattr(args, "animation_frequency", 10),
-            logger=logger,
-            combined_obstacle_mask=combined_obstacle_mask,
-            use_gpu=args.gpu,
-            protected_zone_mask=protected_zone_mask
-        )
+        if getattr(args, "skip_optimization", False):
+            # Skip optimization - create a solid block for FEA testing
+            logger.info("Skipping optimization - creating solid block for FEA testing")
+            start_time = time.time()
+            xPhys = np.ones((args.nely, args.nelx, args.nelz))  # All solid (density = 1.0)
+            history = None
+            final_compliance = 0.0  # Placeholder
+            failure_force = 0.0
+            run_time = time.time() - start_time
+        else:
+            xPhys, history, final_compliance, failure_force, run_time = execute_optimization(
+                nelx=args.nelx,
+                nely=args.nely,
+                nelz=args.nelz,
+                volfrac=args.volfrac,
+                penal=args.penal,
+                rmin=args.rmin,
+                disp_thres=args.disp_thres,
+                elem_size=args.elem_size,
+                material_params=material_params,
+                force_field=force_field,
+                support_mask=support_mask,
+                tolx=getattr(args, "tolx", 0.01),
+                maxloop=getattr(args, "maxloop", 2000),
+                create_animation=getattr(args, "create_animation", False),
+                animation_frequency=getattr(args, "animation_frequency", 10),
+                logger=logger,
+                combined_obstacle_mask=combined_obstacle_mask,
+                use_gpu=args.gpu,
+                protected_zone_mask=protected_zone_mask
+            )
 
         final_response_metrics = evaluate_fixed_geometry_metrics(
             xPhys=xPhys,

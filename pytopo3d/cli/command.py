@@ -5,6 +5,7 @@ This module provides the main entry point when installed as a package.
 """
 
 import sys
+import time
 from typing import List, Optional
 
 import numpy as np
@@ -230,27 +231,36 @@ def main(args: Optional[List[str]] = None) -> int:
         )
 
         # Run the optimization
-        xPhys, history, final_compliance, _, run_time = execute_optimization(
-            nelx=parsed_args.nelx,
-            nely=parsed_args.nely,
-            nelz=parsed_args.nelz,
-            volfrac=parsed_args.volfrac,
-            penal=parsed_args.penal,
-            rmin=parsed_args.rmin,
-            disp_thres=parsed_args.disp_thres,
-            elem_size=parsed_args.elem_size,
-            material_params=material_params,
-            force_field=force_field,
-            support_mask=support_mask,
-            tolx=getattr(parsed_args, "tolx", 0.01),
-            maxloop=getattr(parsed_args, "maxloop", 2000),
-            create_animation=getattr(parsed_args, "create_animation", False),
-            animation_frequency=getattr(parsed_args, "animation_frequency", 10),
-            logger=logger,
-            combined_obstacle_mask=combined_obstacle_mask,
-            use_gpu=parsed_args.gpu,
-            protected_zone_mask=protected_zone_mask,
-        )
+        if getattr(parsed_args, "skip_optimization", False):
+            # Skip optimization - create a solid block for FEA testing
+            logger.info("Skipping optimization - creating solid block for FEA testing")
+            start_time = time.time()
+            xPhys = np.ones((parsed_args.nely, parsed_args.nelx, parsed_args.nelz))  # All solid (density = 1.0)
+            history = None
+            final_compliance = 0.0  # Placeholder
+            run_time = time.time() - start_time
+        else:
+            xPhys, history, final_compliance, _, run_time = execute_optimization(
+                nelx=parsed_args.nelx,
+                nely=parsed_args.nely,
+                nelz=parsed_args.nelz,
+                volfrac=parsed_args.volfrac,
+                penal=parsed_args.penal,
+                rmin=parsed_args.rmin,
+                disp_thres=parsed_args.disp_thres,
+                elem_size=parsed_args.elem_size,
+                material_params=material_params,
+                force_field=force_field,
+                support_mask=support_mask,
+                tolx=getattr(parsed_args, "tolx", 0.01),
+                maxloop=getattr(parsed_args, "maxloop", 2000),
+                create_animation=getattr(parsed_args, "create_animation", False),
+                animation_frequency=getattr(parsed_args, "animation_frequency", 10),
+                logger=logger,
+                combined_obstacle_mask=combined_obstacle_mask,
+                use_gpu=parsed_args.gpu,
+                protected_zone_mask=protected_zone_mask,
+            )
 
         final_response_metrics = evaluate_fixed_geometry_metrics(
             xPhys=xPhys,

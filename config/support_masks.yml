@@ -24,18 +24,10 @@ cantilever_test:
   z1: 0
   z2: 1
 
-debug_support_mask_50x50x2:
+debug_support_mask_20x20x100:
   x1: 0
-  x2: 50
+  x2: 20
   y1: 0
-  y2: 3
-  z1: 0
-  z2: 2
-
-debug_support_mask_75x75x1:
-  x1: 0   
-  x2: 75
-  y1: 0
-  y2: 3
-  z1: 0
-  z2: 1
+  y2: 20
+  z1: 99
+  z2: 100

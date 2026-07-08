@@ -277,6 +277,11 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     log_group.add_argument(
         "--quiet", "-q", action="store_true", help="Suppress output (WARNING level)"
     )
+    log_group.add_argument(
+        "--skip-optimization",
+        action="store_true",
+        help="Skip optimization and create a solid block for FEA testing",
+    )
 
     return parser.parse_args(args)
 
