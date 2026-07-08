@@ -206,6 +206,7 @@ def execute_optimization(
 def export_result_to_stl(
     export_stl: bool = False,
     stl_level: float = 0.5,
+    export_mode: str = "density",
     smooth_stl: bool = False,
     smooth_iterations: int = 3,
     logger: logging.Logger = None,
@@ -218,6 +219,7 @@ def export_result_to_stl(
     Args:
         export_stl: Whether to export as STL
         stl_level: Threshold level for STL export
+        export_mode: Export mode (density, binary, blocky)
         smooth_stl: Whether to smooth the STL mesh
         smooth_iterations: Number of smoothing iterations
         logger: Configured logger
@@ -241,6 +243,7 @@ def export_result_to_stl(
             input_file=result_path,
             output_file=stl_filename,
             level=stl_level,
+            export_mode=export_mode,
             smooth_mesh=smooth_stl,
             smooth_iterations=smooth_iterations,
         )

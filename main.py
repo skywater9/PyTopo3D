@@ -413,6 +413,7 @@ def main():
         stl_exported = export_result_to_stl(
             export_stl=getattr(args, "export_stl", False),
             stl_level=getattr(args, "stl_level", 0.5),
+            export_mode=getattr(args, "export_mode", "density"),
             smooth_stl=getattr(args, "smooth_stl", False),
             smooth_iterations=getattr(args, "smooth_iterations", 3),
             logger=logger,
@@ -444,6 +445,7 @@ def main():
             obstacle_config=getattr(args, "obstacle_config", None),
             animation_fps=getattr(args, "animation_fps", 5),
             stl_level=getattr(args, "stl_level", 0.5),
+            stl_export_mode=getattr(args, "export_mode", "density"),
             smooth_stl=getattr(args, "smooth_stl", False),
             smooth_iterations=getattr(args, "smooth_iterations", 3),
             xPhys=xPhys,

@@ -167,6 +167,16 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Contour level for STL export (default: 0.5)",
     )
     output_group.add_argument(
+        "--export-mode",
+        type=str,
+        choices=["density", "binary", "blocky"],
+        default="density",
+        help=(
+            "STL export mode: density (current smooth density field), "
+            "binary (threshold first, no smoothing), or blocky (voxel cubes)"
+        ),
+    )
+    output_group.add_argument(
         "--smooth-stl",
         action="store_true",
         default=True,

@@ -11,11 +11,12 @@ cd /d "%~dp0.."
   --tolx 0.01 ^
   --maxloop 2000 ^
   --export-stl ^
+  --export-mode blocky ^
   --force-field-preset debug_force_field_75x75x1 ^
-  --material-preset pla_isotropic ^
+  --material-preset pla_xanisotropic ^
   --material-orientation-xyz xzy ^
   --support-mask-preset debug_support_mask_75x75x1 ^
   --protected-zones debug_protected_zone_75x75x1 ^
   --eval-material-presets pla_isotropic pla_anisotropic pla_xanisotropic ^
-  --experiment-name debug_test_iso_75x75x1 ^
+  --experiment-name debug_test_xaniso_75x75x1 ^
   --description "Debug test with support on one end and force on the opposite end"

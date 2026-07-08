@@ -30,6 +30,7 @@ def collect_metrics(
     obstacle_config: Optional[str] = None,
     animation_fps: int = 5,
     stl_level: float = 0.5,
+    stl_export_mode: str = "density",
     smooth_stl: bool = False,
     smooth_iterations: int = 3,
     xPhys: np.ndarray = None,
@@ -62,6 +63,7 @@ def collect_metrics(
         obstacle_config: Path to obstacle configuration file
         animation_fps: Frames per second for animation
         stl_level: Threshold level for STL export
+        stl_export_mode: STL export mode (density, binary, blocky)
         smooth_stl: Whether to smooth the STL mesh
         smooth_iterations: Number of smoothing iterations
         xPhys: Optimized design
@@ -127,9 +129,13 @@ def collect_metrics(
 
     # Add STL export metrics
     if stl_exported:
+        effective_smoothed = (
+            stl_export_mode == "density" and smooth_stl and smooth_iterations > 0
+        )
         metrics["stl_exported"] = True
         metrics["stl_level"] = stl_level
-        metrics["stl_smoothed"] = smooth_stl
+        metrics["stl_export_mode"] = stl_export_mode
+        metrics["stl_smoothed"] = effective_smoothed
         metrics["stl_smooth_iterations"] = smooth_iterations
 
     return metrics
