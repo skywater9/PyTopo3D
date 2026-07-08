@@ -173,6 +173,7 @@ def execute_optimization(
         rmin,
         disp_thres,
         material_params=material_params,
+        elem_size=elem_size,
         force_field=force_field,
         support_mask=support_mask,
         obstacle_mask=combined_obstacle_mask,
