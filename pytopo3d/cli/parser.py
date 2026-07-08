@@ -86,7 +86,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     # Variable experiment paremeters
     variable_experiment_group = parser.add_argument_group("Variable experiment parameters")
     variable_experiment_group.add_argument(
-        "--elem_size",
+        "--elem-size",
         type=float,
         default=0.01,
         help="Element size (meters)",
