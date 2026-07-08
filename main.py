@@ -488,6 +488,7 @@ def main():
             stl_export_mode=getattr(args, "export_mode", "density"),
             smooth_stl=getattr(args, "smooth_stl", False),
             smooth_iterations=getattr(args, "smooth_iterations", 3),
+            skip_optimization=getattr(args, "skip_optimization", False),
             xPhys=xPhys,
             design_space_mask=design_space_mask,
             obstacle_mask=obstacle_mask,

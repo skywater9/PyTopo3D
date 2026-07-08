@@ -50,6 +50,7 @@ def collect_metrics(
     final_binary_voxel_eval: Optional[List[Dict[str, Any]]] = None,
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
+    skip_optimization: bool = False,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
@@ -114,6 +115,7 @@ def collect_metrics(
         "maxloop": maxloop,
         "runtime_seconds": run_time,
         "has_obstacles": obstacle_config is not None,
+        "skip_optimization": skip_optimization,
     }
 
     if final_compliance is not None:
