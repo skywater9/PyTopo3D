@@ -46,7 +46,7 @@ def _make_scatter_map(i_full, j_full, ndof):
     return i_uniq, j_uniq, dup2uniq
 
 
-def evaluate_fixed_geometry_compliance(
+def evaluate_fixed_geometry_metrics(
     xPhys: np.ndarray,
     penal: float,
     material_params: Optional[Tuple[float, ...]] = None,
@@ -56,12 +56,16 @@ def evaluate_fixed_geometry_compliance(
     obstacle_mask: Optional[np.ndarray] = None,
     protected_zone_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
-) -> float:
+) -> Dict[str, Optional[float]]:
     """
-    Evaluate compliance for a fixed voxel geometry under given material/BC settings.
+    Evaluate fixed-geometry response metrics under given material/BC settings.
 
-    This performs a single FE solve with no OC update and returns the same
-    objective definition used in optimization.
+    This performs a single FE solve with no OC update and returns:
+    - compliance: objective definition used in optimization
+    - u{x,y,z}_avg_load_patch: average displacement on loaded-node DOFs
+    - k_avg_{x,y,z}: directional equivalent stiffness F_dir / abs(u_dir)
+    - k_avg: equivalent stiffness on dominant loading direction (legacy)
+    - F_total and F_total_{x,y,z}: absolute load magnitudes
     """
     nely, nelx, nelz = xPhys.shape
     ndof = 3 * (nelx + 1) * (nely + 1) * (nelz + 1)
@@ -85,6 +89,15 @@ def evaluate_fixed_geometry_compliance(
     E0, Emin = 1.0, 1e-9
 
     F = build_force_vector(nelx, nely, nelz, ndof, force_field)
+    loaded_dofs = np.where(np.abs(F) > 0.0)[0]
+    loaded_nodes = np.unique(loaded_dofs // 3)
+    loaded_x_dofs = 3 * loaded_nodes
+    loaded_y_dofs = 3 * loaded_nodes + 1
+    loaded_z_dofs = 3 * loaded_nodes + 2
+    F_total_x = float(np.sum(np.abs(F[loaded_x_dofs]))) if loaded_x_dofs.size else 0.0
+    F_total_y = float(np.sum(np.abs(F[loaded_y_dofs]))) if loaded_y_dofs.size else 0.0
+    F_total_z = float(np.sum(np.abs(F[loaded_z_dofs]))) if loaded_z_dofs.size else 0.0
+    F_total = float(np.sum(np.abs(F[loaded_dofs]))) if loaded_dofs.size else 0.0
     freedofs0, _ = build_supports(nelx, nely, nelz, ndof, support_mask)
 
     if material_params is None:
@@ -121,7 +134,56 @@ def evaluate_fixed_geometry_compliance(
         ce_flat_gpu = element_compliance(U_gpu, cp.asarray(edofMat), KE_gpu)
         ce_gpu = ce_flat_gpu.reshape(nely, nelx, nelz, order="F")
         c_gpu = cp.sum((Emin + cp.asarray(x_eval) ** penal * (E0 - Emin)) * ce_gpu)
-        return float(c_gpu.item())
+        compliance = float(c_gpu.item())
+
+        ux_avg_load_patch: Optional[float] = None
+        uy_avg_load_patch: Optional[float] = None
+        uz_avg_load_patch: Optional[float] = None
+        if loaded_x_dofs.size:
+            loaded_x_dofs_gpu = cp.asarray(loaded_x_dofs)
+            ux_avg_load_patch = float(cp.mean(U_gpu[loaded_x_dofs_gpu]).item())
+        if loaded_y_dofs.size:
+            loaded_y_dofs_gpu = cp.asarray(loaded_y_dofs)
+            uy_avg_load_patch = float(cp.mean(U_gpu[loaded_y_dofs_gpu]).item())
+        if loaded_z_dofs.size:
+            loaded_z_dofs_gpu = cp.asarray(loaded_z_dofs)
+            uz_avg_load_patch = float(cp.mean(U_gpu[loaded_z_dofs_gpu]).item())
+
+        k_avg_x: Optional[float] = None
+        if ux_avg_load_patch is not None and ux_avg_load_patch != 0.0 and F_total_x > 0.0:
+            k_avg_x = float(F_total_x / abs(ux_avg_load_patch))
+
+        k_avg_y: Optional[float] = None
+        if uy_avg_load_patch is not None and uy_avg_load_patch != 0.0 and F_total > 0.0:
+            k_avg_y = float(F_total_y / abs(uy_avg_load_patch)) if F_total_y > 0.0 else None
+
+        k_avg_z: Optional[float] = None
+        if uz_avg_load_patch is not None and uz_avg_load_patch != 0.0 and F_total_z > 0.0:
+            k_avg_z = float(F_total_z / abs(uz_avg_load_patch))
+
+        dominant_dir = max(
+            (("x", F_total_x), ("y", F_total_y), ("z", F_total_z)),
+            key=lambda item: item[1],
+        )[0]
+        k_avg: Optional[float] = {"x": k_avg_x, "y": k_avg_y, "z": k_avg_z}[dominant_dir]
+
+        return {
+            "compliance": compliance,
+            "ux_avg_load_patch": ux_avg_load_patch,
+            "uy_avg_load_patch": uy_avg_load_patch,
+            "uz_avg_load_patch": uz_avg_load_patch,
+            "k_avg_x": k_avg_x,
+            "k_avg_y": k_avg_y,
+            "k_avg_z": k_avg_z,
+            "k_avg": k_avg,
+            "F_total": F_total,
+            "F_total_x": F_total_x,
+            "F_total_y": F_total_y,
+            "F_total_z": F_total_z,
+            "loaded_x_dof_count": int(loaded_x_dofs.size),
+            "loaded_y_dof_count": int(loaded_y_dofs.size),
+            "loaded_z_dof_count": int(loaded_z_dofs.size),
+        }
 
     stiff = Emin + (x_eval.ravel(order="F") ** penal) * (E0 - Emin)
     elem_vals = np.kron(stiff, KE.ravel())
@@ -137,7 +199,79 @@ def evaluate_fixed_geometry_compliance(
     ce_flat = element_compliance(U, edofMat, KE)
     ce = ce_flat.reshape(nely, nelx, nelz, order="F")
     c = ((Emin + x_eval ** penal * (E0 - Emin)) * ce).sum()
-    return float(c)
+
+    ux_avg_load_patch: Optional[float] = None
+    uy_avg_load_patch: Optional[float] = None
+    uz_avg_load_patch: Optional[float] = None
+    if loaded_x_dofs.size:
+        ux_avg_load_patch = float(np.mean(U[loaded_x_dofs]))
+    if loaded_y_dofs.size:
+        uy_avg_load_patch = float(np.mean(U[loaded_y_dofs]))
+    if loaded_z_dofs.size:
+        uz_avg_load_patch = float(np.mean(U[loaded_z_dofs]))
+
+    k_avg_x: Optional[float] = None
+    if ux_avg_load_patch is not None and ux_avg_load_patch != 0.0 and F_total_x > 0.0:
+        k_avg_x = float(F_total_x / abs(ux_avg_load_patch))
+
+    k_avg_y: Optional[float] = None
+    if uy_avg_load_patch is not None and uy_avg_load_patch != 0.0 and F_total_y > 0.0:
+        k_avg_y = float(F_total_y / abs(uy_avg_load_patch))
+
+    k_avg_z: Optional[float] = None
+    if uz_avg_load_patch is not None and uz_avg_load_patch != 0.0 and F_total_z > 0.0:
+        k_avg_z = float(F_total_z / abs(uz_avg_load_patch))
+
+    dominant_dir = max(
+        (("x", F_total_x), ("y", F_total_y), ("z", F_total_z)),
+        key=lambda item: item[1],
+    )[0]
+    k_avg: Optional[float] = {"x": k_avg_x, "y": k_avg_y, "z": k_avg_z}[dominant_dir]
+
+    return {
+        "compliance": float(c),
+        "ux_avg_load_patch": ux_avg_load_patch,
+        "uy_avg_load_patch": uy_avg_load_patch,
+        "uz_avg_load_patch": uz_avg_load_patch,
+        "k_avg_x": k_avg_x,
+        "k_avg_y": k_avg_y,
+        "k_avg_z": k_avg_z,
+        "k_avg": k_avg,
+        "F_total": F_total,
+        "F_total_x": F_total_x,
+        "F_total_y": F_total_y,
+        "F_total_z": F_total_z,
+        "loaded_x_dof_count": int(loaded_x_dofs.size),
+        "loaded_y_dof_count": int(loaded_y_dofs.size),
+        "loaded_z_dof_count": int(loaded_z_dofs.size),
+    }
+
+
+def evaluate_fixed_geometry_compliance(
+    xPhys: np.ndarray,
+    penal: float,
+    material_params: Optional[Tuple[float, ...]] = None,
+    elem_size: float = 0.01,
+    force_field: Optional[np.ndarray] = None,
+    support_mask: Optional[np.ndarray] = None,
+    obstacle_mask: Optional[np.ndarray] = None,
+    protected_zone_mask: Optional[np.ndarray] = None,
+    use_gpu: bool = False,
+) -> float:
+    """Backward-compatible wrapper returning only fixed-geometry compliance."""
+    return float(
+        evaluate_fixed_geometry_metrics(
+            xPhys=xPhys,
+            penal=penal,
+            material_params=material_params,
+            elem_size=elem_size,
+            force_field=force_field,
+            support_mask=support_mask,
+            obstacle_mask=obstacle_mask,
+            protected_zone_mask=protected_zone_mask,
+            use_gpu=use_gpu,
+        )["compliance"]
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────

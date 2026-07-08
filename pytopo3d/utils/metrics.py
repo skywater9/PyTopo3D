@@ -39,6 +39,13 @@ def collect_metrics(
     combined_obstacle_mask: np.ndarray = None,
     run_time: float = 0.0,
     final_compliance: Optional[float] = None,
+    final_ux_avg_load_patch: Optional[float] = None,
+    final_uy_avg_load_patch: Optional[float] = None,
+    final_uz_avg_load_patch: Optional[float] = None,
+    final_k_avg_x: Optional[float] = None,
+    final_k_avg_y: Optional[float] = None,
+    final_k_avg_z: Optional[float] = None,
+    final_k_avg: Optional[float] = None,
     final_voxel_eval: Optional[List[Dict[str, Any]]] = None,
     final_binary_voxel_eval: Optional[List[Dict[str, Any]]] = None,
     gif_path: Optional[str] = None,
@@ -72,6 +79,13 @@ def collect_metrics(
         combined_obstacle_mask: Combined obstacle and design space mask
         run_time: Optimization runtime in seconds
         final_compliance: Final compliance/objective value from the optimizer
+        final_ux_avg_load_patch: Mean displacement on loaded x-direction DOFs
+        final_uy_avg_load_patch: Mean displacement on loaded y-direction DOFs
+        final_uz_avg_load_patch: Mean displacement on loaded z-direction DOFs
+        final_k_avg_x: Equivalent stiffness F_x / abs(final_ux_avg_load_patch)
+        final_k_avg_y: Equivalent stiffness F_y / abs(final_uy_avg_load_patch)
+        final_k_avg_z: Equivalent stiffness F_z / abs(final_uz_avg_load_patch)
+        final_k_avg: Equivalent stiffness on dominant loading direction
         final_voxel_eval: Optional list of fixed-geometry evaluations under alternate materials
         final_binary_voxel_eval: Optional list of thresholded binary fixed-geometry
             evaluations under one or more materials
@@ -104,6 +118,20 @@ def collect_metrics(
 
     if final_compliance is not None:
         metrics["final_compliance"] = final_compliance
+    if final_ux_avg_load_patch is not None:
+        metrics["ux_avg_load_patch"] = final_ux_avg_load_patch
+    if final_uy_avg_load_patch is not None:
+        metrics["uy_avg_load_patch"] = final_uy_avg_load_patch
+    if final_uz_avg_load_patch is not None:
+        metrics["uz_avg_load_patch"] = final_uz_avg_load_patch
+    if final_k_avg_x is not None:
+        metrics["k_avg_x"] = final_k_avg_x
+    if final_k_avg_y is not None:
+        metrics["k_avg_y"] = final_k_avg_y
+    if final_k_avg_z is not None:
+        metrics["k_avg_z"] = final_k_avg_z
+    if final_k_avg is not None:
+        metrics["k_avg"] = final_k_avg
     if final_voxel_eval:
         metrics["final_voxel_eval"] = final_voxel_eval
     if final_binary_voxel_eval:

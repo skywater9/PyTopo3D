@@ -41,7 +41,7 @@ debug_force_field_50x50x2:
   y2: 50
   z1: 0
   z2: 2
-  F_x: -1.0
+  F_x: -2.0
   F_y: 0.0
   F_z: 0.0  
 
@@ -52,6 +52,6 @@ debug_force_field_75x75x1:
   y2: 75
   z1: 0
   z2: 1
-  F_x: -1.0
+  F_x: -2.0
   F_y: 0.0
   F_z: 0.0

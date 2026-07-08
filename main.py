@@ -9,7 +9,10 @@ import sys
 import numpy as np
 
 from pytopo3d.cli.parser import parse_args
-from pytopo3d.core.optimizer import evaluate_fixed_geometry_compliance
+from pytopo3d.core.optimizer import (
+    evaluate_fixed_geometry_compliance,
+    evaluate_fixed_geometry_metrics,
+)
 from pytopo3d.preprocessing.geometry import load_geometry_data
 from pytopo3d.runners.experiment import (
     execute_optimization,
@@ -215,6 +218,18 @@ def main():
             protected_zone_mask=protected_zone_mask
         )
 
+        final_response_metrics = evaluate_fixed_geometry_metrics(
+            xPhys=xPhys,
+            penal=args.penal,
+            material_params=material_params,
+            elem_size=args.elem_size,
+            force_field=force_field,
+            support_mask=support_mask,
+            obstacle_mask=combined_obstacle_mask,
+            protected_zone_mask=protected_zone_mask,
+            use_gpu=args.gpu,
+        )
+
         final_voxel_eval = None
         if eval_material_queue:
             final_voxel_eval = []
@@ -224,7 +239,7 @@ def main():
                     eval_material_params,
                     eval_material_orientation_xyz,
                 )
-                eval_compliance = evaluate_fixed_geometry_compliance(
+                eval_metrics = evaluate_fixed_geometry_metrics(
                     xPhys=xPhys,
                     penal=args.penal,
                     material_params=eval_material_params,
@@ -239,7 +254,14 @@ def main():
                     {
                         "material_preset": eval_material_preset,
                         "material_orientation_xyz": eval_material_orientation_xyz,
-                        "compliance": eval_compliance,
+                        "compliance": eval_metrics["compliance"],
+                        "ux_avg_load_patch": eval_metrics["ux_avg_load_patch"],
+                        "uy_avg_load_patch": eval_metrics["uy_avg_load_patch"],
+                        "uz_avg_load_patch": eval_metrics["uz_avg_load_patch"],
+                        "k_avg_x": eval_metrics["k_avg_x"],
+                        "k_avg_y": eval_metrics["k_avg_y"],
+                        "k_avg_z": eval_metrics["k_avg_z"],
+                        "k_avg": eval_metrics["k_avg"],
                     }
                 )
 
@@ -316,7 +338,7 @@ def main():
                 )
                 eval_material_name = eval_material_preset
 
-            eval_binary_compliance = evaluate_fixed_geometry_compliance(
+            eval_binary_metrics = evaluate_fixed_geometry_metrics(
                 xPhys=x_binary,
                 penal=args.penal,
                 material_params=eval_material_params,
@@ -333,7 +355,14 @@ def main():
                     "material_preset": eval_material_name,
                     "material_orientation_xyz": binary_eval_orientation,
                     "voxel_fill_fraction": voxel_fill_fraction,
-                    "compliance": eval_binary_compliance,
+                    "compliance": eval_binary_metrics["compliance"],
+                    "ux_avg_load_patch": eval_binary_metrics["ux_avg_load_patch"],
+                    "uy_avg_load_patch": eval_binary_metrics["uy_avg_load_patch"],
+                    "uz_avg_load_patch": eval_binary_metrics["uz_avg_load_patch"],
+                    "k_avg_x": eval_binary_metrics["k_avg_x"],
+                    "k_avg_y": eval_binary_metrics["k_avg_y"],
+                    "k_avg_z": eval_binary_metrics["k_avg_z"],
+                    "k_avg": eval_binary_metrics["k_avg"],
                 }
             )
 
@@ -454,6 +483,13 @@ def main():
             combined_obstacle_mask=combined_obstacle_mask,
             run_time=run_time,
             final_compliance=final_compliance,
+            final_ux_avg_load_patch=final_response_metrics["ux_avg_load_patch"],
+            final_uy_avg_load_patch=final_response_metrics["uy_avg_load_patch"],
+            final_uz_avg_load_patch=final_response_metrics["uz_avg_load_patch"],
+            final_k_avg_x=final_response_metrics["k_avg_x"],
+            final_k_avg_y=final_response_metrics["k_avg_y"],
+            final_k_avg_z=final_response_metrics["k_avg_z"],
+            final_k_avg=final_response_metrics["k_avg"],
             final_voxel_eval=final_voxel_eval,
             final_binary_voxel_eval=final_binary_voxel_eval,
             gif_path=gif_path,

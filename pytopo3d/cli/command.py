@@ -11,7 +11,10 @@ import numpy as np
 
 # Import the main function from the main module
 from pytopo3d.cli.parser import parse_args
-from pytopo3d.core.optimizer import evaluate_fixed_geometry_compliance
+from pytopo3d.core.optimizer import (
+    evaluate_fixed_geometry_compliance,
+    evaluate_fixed_geometry_metrics,
+)
 from pytopo3d.preprocessing.geometry import load_geometry_data
 from pytopo3d.runners.experiment import (
     execute_optimization,
@@ -249,6 +252,18 @@ def main(args: Optional[List[str]] = None) -> int:
             protected_zone_mask=protected_zone_mask,
         )
 
+        final_response_metrics = evaluate_fixed_geometry_metrics(
+            xPhys=xPhys,
+            penal=parsed_args.penal,
+            material_params=material_params,
+            elem_size=parsed_args.elem_size,
+            force_field=force_field,
+            support_mask=support_mask,
+            obstacle_mask=combined_obstacle_mask,
+            protected_zone_mask=protected_zone_mask,
+            use_gpu=parsed_args.gpu,
+        )
+
         final_voxel_eval = None
         if eval_material_queue:
             final_voxel_eval = []
@@ -258,7 +273,7 @@ def main(args: Optional[List[str]] = None) -> int:
                     eval_material_params,
                     eval_material_orientation_xyz,
                 )
-                eval_compliance = evaluate_fixed_geometry_compliance(
+                eval_metrics = evaluate_fixed_geometry_metrics(
                     xPhys=xPhys,
                     penal=parsed_args.penal,
                     material_params=eval_material_params,
@@ -273,7 +288,14 @@ def main(args: Optional[List[str]] = None) -> int:
                     {
                         "material_preset": eval_material_preset,
                         "material_orientation_xyz": eval_material_orientation_xyz,
-                        "compliance": eval_compliance,
+                        "compliance": eval_metrics["compliance"],
+                        "ux_avg_load_patch": eval_metrics["ux_avg_load_patch"],
+                        "uy_avg_load_patch": eval_metrics["uy_avg_load_patch"],
+                        "uz_avg_load_patch": eval_metrics["uz_avg_load_patch"],
+                        "k_avg_x": eval_metrics["k_avg_x"],
+                        "k_avg_y": eval_metrics["k_avg_y"],
+                        "k_avg_z": eval_metrics["k_avg_z"],
+                        "k_avg": eval_metrics["k_avg"],
                     }
                 )
 
@@ -402,6 +424,13 @@ def main(args: Optional[List[str]] = None) -> int:
             combined_obstacle_mask=combined_obstacle_mask,
             run_time=run_time,
             final_compliance=final_compliance,
+            final_ux_avg_load_patch=final_response_metrics["ux_avg_load_patch"],
+            final_uy_avg_load_patch=final_response_metrics["uy_avg_load_patch"],
+            final_uz_avg_load_patch=final_response_metrics["uz_avg_load_patch"],
+            final_k_avg_x=final_response_metrics["k_avg_x"],
+            final_k_avg_y=final_response_metrics["k_avg_y"],
+            final_k_avg_z=final_response_metrics["k_avg_z"],
+            final_k_avg=final_response_metrics["k_avg"],
             final_voxel_eval=final_voxel_eval,
             gif_path=gif_path,
             stl_exported=stl_exported,
