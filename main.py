@@ -241,6 +241,9 @@ def main():
             use_gpu=args.gpu,
         )
 
+        if getattr(args, "skip_optimization", False):
+            final_compliance = final_response_metrics["compliance"]
+
         final_voxel_eval = None
         if eval_material_queue:
             final_voxel_eval = []
