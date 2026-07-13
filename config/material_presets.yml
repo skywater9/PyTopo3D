@@ -32,14 +32,14 @@ pla_isotropic:
 pla_xanisotropic:
   #exaggerated anisotropic PLA values for testing
   E_x: 2.669e9
-  E_y: 1e9
-  E_z: 3e8
+  E_y: 1.0e9
+  E_z: 3.0e8
   G_xy: 0.919e9
-  G_yz: 0.6e9 # estimated
+  G_yz: 0.6e9
   G_zx: 0.75e9
   nu_xy: 0.43
-  nu_yz: 0.34 # estimated
-  nu_zx: 0.306
+  nu_yz: 0.34
+  nu_zx: 0.20
 
 aluminum_5052_h32:
   # TODO get accurate values 

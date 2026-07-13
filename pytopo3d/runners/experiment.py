@@ -112,7 +112,8 @@ def execute_optimization(
     combined_obstacle_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
     protected_zone_mask: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, Optional[Dict], None, float, float]:
+) -> Tuple[np.ndarray, Optional[Dict], float, float, float]:
+
     """
     Run the topology optimization process.
 
@@ -206,8 +207,10 @@ def execute_optimization(
 def export_result_to_stl(
     export_stl: bool = False,
     stl_level: float = 0.5,
+    export_mode: str = "density",
     smooth_stl: bool = False,
     smooth_iterations: int = 3,
+    combined_obstacle_mask: Optional[np.ndarray] = None,
     logger: logging.Logger = None,
     results_mgr: ResultsManager = None,
     result_path: str = None,
@@ -218,8 +221,10 @@ def export_result_to_stl(
     Args:
         export_stl: Whether to export as STL
         stl_level: Threshold level for STL export
+        export_mode: Export mode (density, binary, blocky)
         smooth_stl: Whether to smooth the STL mesh
         smooth_iterations: Number of smoothing iterations
+        combined_obstacle_mask: Boolean mask of restricted voxels (True = restricted)
         logger: Configured logger
         results_mgr: Results manager instance
         result_path: Path to the saved optimization result
@@ -234,13 +239,38 @@ def export_result_to_stl(
         # Create the STL filename
         stl_filename = os.path.join(results_mgr.experiment_dir, "optimized_design.stl")
 
+        # Prepare voxel field and carve out restricted regions before meshing.
+        stl_input = result_path
+        if combined_obstacle_mask is not None:
+            voxel_data = np.load(result_path)
+            obstacle_mask_bool = combined_obstacle_mask.astype(bool)
+
+            if obstacle_mask_bool.shape != voxel_data.shape:
+                # Handle occasional x/y swapped masks from STL voxelization path.
+                if obstacle_mask_bool.transpose(1, 0, 2).shape == voxel_data.shape:
+                    obstacle_mask_bool = obstacle_mask_bool.transpose(1, 0, 2)
+                    if logger:
+                        logger.debug(
+                            "Transposed combined_obstacle_mask to match result volume shape"
+                        )
+                else:
+                    raise ValueError(
+                        "combined_obstacle_mask shape does not match optimized result shape: "
+                        f"{obstacle_mask_bool.shape} vs {voxel_data.shape}"
+                    )
+
+            voxel_data = voxel_data.copy()
+            voxel_data[obstacle_mask_bool] = 0.0
+            stl_input = voxel_data
+
         # Export the result as an STL file
         if logger:
             logger.info("Exporting optimization result as STL file...")
         voxel_to_stl(
-            input_file=result_path,
+            input_file=stl_input,
             output_file=stl_filename,
             level=stl_level,
+            export_mode=export_mode,
             smooth_mesh=smooth_stl,
             smooth_iterations=smooth_iterations,
         )

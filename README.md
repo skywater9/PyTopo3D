@@ -280,6 +280,7 @@ You can export the final optimization result as an STL file for 3D printing or f
 python main.py --nelx 32 --nely 16 --nelz 16 \
                --volfrac 0.3 --penal 3.0 --rmin 3.0 \
                --export-stl \
+               [--export-mode density|binary|blocky] \
                [--stl-level 0.5] \
                [--smooth-stl] \
                [--smooth-iterations 5]
@@ -287,6 +288,10 @@ python main.py --nelx 32 --nely 16 --nelz 16 \
 
 Options:
 - `--export-stl`: Flag to enable STL export of the final optimization result
+- `--export-mode`: STL export mode:
+  - `density`: current method (`xPhys` density field -> upsample -> marching cubes -> optional smoothing)
+  - `binary`: threshold first (`xPhys >= stl-level`) -> marching cubes, smoothing disabled
+  - `blocky`: voxel-cube export for occupied elements (`xPhys >= stl-level`)
 - `--stl-level`: Contour level for the marching cubes algorithm (default: 0.5)
 - `--smooth-stl`: Flag to apply Laplacian smoothing to the mesh (default: True)
 - `--smooth-iterations`: Number of iterations for mesh smoothing (default: 5)

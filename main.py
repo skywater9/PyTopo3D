@@ -6,9 +6,14 @@ This script provides a command-line interface to run the topology optimization.
 """
 
 import sys
+import time
 import numpy as np
 
 from pytopo3d.cli.parser import parse_args
+from pytopo3d.core.optimizer import (
+    evaluate_fixed_geometry_compliance,
+    evaluate_fixed_geometry_metrics,
+)
 from pytopo3d.preprocessing.geometry import load_geometry_data
 from pytopo3d.runners.experiment import (
     execute_optimization,
@@ -105,6 +110,26 @@ def main():
                     "--material-orientation-xyz was provided without --material-preset; orientation mapping is ignored."
                 )
 
+        eval_material_orientation_xyz = parse_material_orientation_xyz(
+            getattr(args, "eval_material_orientation_xyz", None)
+        )
+        if eval_material_orientation_xyz is None:
+            eval_material_orientation_xyz = material_orientation_xyz
+
+        eval_material_queue = []
+        if getattr(args, "eval_material_presets", None):
+            if material_preset is not None:
+                eval_material_queue.append(material_preset)
+            eval_material_queue.extend(args.eval_material_presets)
+            deduped = []
+            seen = set()
+            for preset_name in eval_material_queue:
+                key = preset_name.lower()
+                if key not in seen:
+                    deduped.append(preset_name)
+                    seen.add(key)
+            eval_material_queue = deduped
+
         # --- Build Boundary Conditions ---
         force_field_preset = args.force_field_preset
         if force_field_preset is not None:
@@ -172,27 +197,119 @@ def main():
         )
 
         # Run the optimization - Passing force_field and support_mask
-        xPhys, history, final_compliance, failure_force, run_time = execute_optimization(
-            nelx=args.nelx,
-            nely=args.nely,
-            nelz=args.nelz,
-            volfrac=args.volfrac,
+        if getattr(args, "skip_optimization", False):
+            # Skip optimization - create a solid block for FEA testing
+            logger.info("Skipping optimization - creating solid block for FEA testing")
+            start_time = time.time()
+            xPhys = np.ones((args.nely, args.nelx, args.nelz))  # All solid (density = 1.0)
+            history = None
+            final_compliance = 0.0  # Placeholder
+            failure_force = 0.0
+            run_time = time.time() - start_time
+        else:
+            xPhys, history, final_compliance, failure_force, run_time = execute_optimization(
+                nelx=args.nelx,
+                nely=args.nely,
+                nelz=args.nelz,
+                volfrac=args.volfrac,
+                penal=args.penal,
+                rmin=args.rmin,
+                disp_thres=args.disp_thres,
+                elem_size=args.elem_size,
+                material_params=material_params,
+                force_field=force_field,
+                support_mask=support_mask,
+                tolx=getattr(args, "tolx", 0.01),
+                maxloop=getattr(args, "maxloop", 2000),
+                create_animation=getattr(args, "create_animation", False),
+                animation_frequency=getattr(args, "animation_frequency", 10),
+                logger=logger,
+                combined_obstacle_mask=combined_obstacle_mask,
+                use_gpu=args.gpu,
+                protected_zone_mask=protected_zone_mask
+            )
+
+        final_response_metrics = evaluate_fixed_geometry_metrics(
+            xPhys=xPhys,
             penal=args.penal,
-            rmin=args.rmin,
-            disp_thres=args.disp_thres,
-            elem_size=args.elem_size,
             material_params=material_params,
+            elem_size=args.elem_size,
             force_field=force_field,
             support_mask=support_mask,
-            tolx=getattr(args, "tolx", 0.01),
-            maxloop=getattr(args, "maxloop", 2000),
-            create_animation=getattr(args, "create_animation", False),
-            animation_frequency=getattr(args, "animation_frequency", 10),
-            logger=logger,
-            combined_obstacle_mask=combined_obstacle_mask,
+            obstacle_mask=combined_obstacle_mask,
+            protected_zone_mask=protected_zone_mask,
             use_gpu=args.gpu,
-            protected_zone_mask=protected_zone_mask
         )
+
+        if getattr(args, "skip_optimization", False):
+            final_compliance = final_response_metrics["compliance"]
+
+        final_voxel_eval = None
+        if eval_material_queue:
+            final_voxel_eval = []
+            for eval_material_preset in eval_material_queue:
+                eval_material_params = get_material_params(eval_material_preset)
+                eval_material_params = apply_material_orientation(
+                    eval_material_params,
+                    eval_material_orientation_xyz,
+                )
+                eval_metrics = evaluate_fixed_geometry_metrics(
+                    xPhys=xPhys,
+                    penal=args.penal,
+                    material_params=eval_material_params,
+                    elem_size=args.elem_size,
+                    force_field=force_field,
+                    support_mask=support_mask,
+                    obstacle_mask=combined_obstacle_mask,
+                    protected_zone_mask=protected_zone_mask,
+                    use_gpu=args.gpu,
+                )
+                final_voxel_eval.append(
+                    {
+                        "material_preset": eval_material_preset,
+                        "material_orientation_xyz": eval_material_orientation_xyz,
+                        "compliance": eval_metrics["compliance"],
+                        "ux_avg_load_patch": eval_metrics["ux_avg_load_patch"],
+                        "uy_avg_load_patch": eval_metrics["uy_avg_load_patch"],
+                        "uz_avg_load_patch": eval_metrics["uz_avg_load_patch"],
+                        "k_avg_x": eval_metrics["k_avg_x"],
+                        "k_avg_y": eval_metrics["k_avg_y"],
+                        "k_avg_z": eval_metrics["k_avg_z"],
+                        "k_avg": eval_metrics["k_avg"],
+                    }
+                )
+
+            baseline_compliance = None
+            if material_preset is not None:
+                for row in final_voxel_eval:
+                    if row["material_preset"].lower() == material_preset.lower():
+                        baseline_compliance = row["compliance"]
+                        break
+            if baseline_compliance is None and final_compliance is not None:
+                baseline_compliance = final_compliance
+
+            if baseline_compliance is not None and baseline_compliance != 0.0:
+                for row in final_voxel_eval:
+                    row["relative_to_baseline"] = row["compliance"] / baseline_compliance
+
+            sorted_rows = sorted(final_voxel_eval, key=lambda row: row["compliance"])
+            for rank, row in enumerate(sorted_rows, start=1):
+                row["rank"] = rank
+
+            logger.info(
+                "Final voxel cross-material evaluation (lower compliance means stiffer):"
+            )
+            for row in sorted_rows:
+                ratio_text = ""
+                if "relative_to_baseline" in row:
+                    ratio_text = f", ratio={row['relative_to_baseline']:.4f}"
+                logger.info(
+                    "  rank=%d, material=%s, compliance=%.6e%s",
+                    row["rank"],
+                    row["material_preset"],
+                    row["compliance"],
+                    ratio_text,
+                )
 
         # Save the result to the experiment directory
 
@@ -204,6 +321,99 @@ def main():
 
         xPhys_union = xPhys.copy()
         xPhys_union[union_mask] = 1.0
+
+        # Binary evaluation mirrors the STL threshold exactly so the reported
+        # compliance matches the pre-smoothing binary voxel behavior.
+        binary_eval_level = float(getattr(args, "stl_level", 0.5))
+
+        if eval_material_queue:
+            binary_eval_material_queue = list(eval_material_queue)
+            binary_eval_orientation = eval_material_orientation_xyz
+        elif material_preset is not None:
+            binary_eval_material_queue = [material_preset]
+            binary_eval_orientation = material_orientation_xyz
+        else:
+            binary_eval_material_queue = [None]
+            binary_eval_orientation = material_orientation_xyz
+
+        final_binary_voxel_eval = []
+        x_binary = (xPhys_union >= binary_eval_level).astype(float)
+        voxel_fill_fraction = float(np.mean(x_binary))
+
+        for eval_material_preset in binary_eval_material_queue:
+            if eval_material_preset is None:
+                eval_material_params = material_params
+                eval_material_name = "optimizer_material"
+            else:
+                eval_material_params = get_material_params(eval_material_preset)
+                eval_material_params = apply_material_orientation(
+                    eval_material_params,
+                    binary_eval_orientation,
+                )
+                eval_material_name = eval_material_preset
+
+            eval_binary_metrics = evaluate_fixed_geometry_metrics(
+                xPhys=x_binary,
+                penal=args.penal,
+                material_params=eval_material_params,
+                elem_size=args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                use_gpu=args.gpu,
+            )
+
+            final_binary_voxel_eval.append(
+                {
+                    "material_preset": eval_material_name,
+                    "material_orientation_xyz": binary_eval_orientation,
+                    "voxel_fill_fraction": voxel_fill_fraction,
+                    "compliance": eval_binary_metrics["compliance"],
+                    "ux_avg_load_patch": eval_binary_metrics["ux_avg_load_patch"],
+                    "uy_avg_load_patch": eval_binary_metrics["uy_avg_load_patch"],
+                    "uz_avg_load_patch": eval_binary_metrics["uz_avg_load_patch"],
+                    "k_avg_x": eval_binary_metrics["k_avg_x"],
+                    "k_avg_y": eval_binary_metrics["k_avg_y"],
+                    "k_avg_z": eval_binary_metrics["k_avg_z"],
+                    "k_avg": eval_binary_metrics["k_avg"],
+                }
+            )
+
+        baseline_row = None
+        if material_preset is not None:
+            for row in final_binary_voxel_eval:
+                if row["material_preset"].lower() == material_preset.lower():
+                    baseline_row = row
+                    break
+        if baseline_row is None and final_binary_voxel_eval:
+            baseline_row = final_binary_voxel_eval[0]
+
+        if baseline_row is not None and baseline_row["compliance"] != 0.0:
+            baseline_compliance = baseline_row["compliance"]
+            for row in final_binary_voxel_eval:
+                row["relative_to_baseline"] = row["compliance"] / baseline_compliance
+
+        sorted_rows = sorted(final_binary_voxel_eval, key=lambda row: row["compliance"])
+        for rank, row in enumerate(sorted_rows, start=1):
+            row["rank"] = rank
+
+        logger.info(
+            "Binary voxel evaluation at STL level=%.3f (lower compliance means stiffer):",
+            binary_eval_level,
+        )
+        for row in sorted_rows:
+            ratio_text = ""
+            if "relative_to_baseline" in row:
+                ratio_text = f", ratio={row['relative_to_baseline']:.4f}"
+            logger.info(
+                "  rank=%d, material=%s, compliance=%.6e, fill=%.4f%s",
+                row["rank"],
+                row["material_preset"],
+                row["compliance"],
+                row["voxel_fill_fraction"],
+                ratio_text,
+            )
 
         result_path = results_mgr.save_result(xPhys_union, "optimized_design.npy")
         logger.debug(f"Optimization result saved to {result_path}")
@@ -246,8 +456,10 @@ def main():
         stl_exported = export_result_to_stl(
             export_stl=getattr(args, "export_stl", False),
             stl_level=getattr(args, "stl_level", 0.5),
+            export_mode=getattr(args, "export_mode", "density"),
             smooth_stl=getattr(args, "smooth_stl", False),
             smooth_iterations=getattr(args, "smooth_iterations", 3),
+            combined_obstacle_mask=combined_obstacle_mask,
             logger=logger,
             results_mgr=results_mgr,
             result_path=result_path,
@@ -277,14 +489,25 @@ def main():
             obstacle_config=getattr(args, "obstacle_config", None),
             animation_fps=getattr(args, "animation_fps", 5),
             stl_level=getattr(args, "stl_level", 0.5),
+            stl_export_mode=getattr(args, "export_mode", "density"),
             smooth_stl=getattr(args, "smooth_stl", False),
             smooth_iterations=getattr(args, "smooth_iterations", 3),
+            skip_optimization=getattr(args, "skip_optimization", False),
             xPhys=xPhys,
             design_space_mask=design_space_mask,
             obstacle_mask=obstacle_mask,
             combined_obstacle_mask=combined_obstacle_mask,
             run_time=run_time,
             final_compliance=final_compliance,
+            final_ux_avg_load_patch=final_response_metrics["ux_avg_load_patch"],
+            final_uy_avg_load_patch=final_response_metrics["uy_avg_load_patch"],
+            final_uz_avg_load_patch=final_response_metrics["uz_avg_load_patch"],
+            final_k_avg_x=final_response_metrics["k_avg_x"],
+            final_k_avg_y=final_response_metrics["k_avg_y"],
+            final_k_avg_z=final_response_metrics["k_avg_z"],
+            final_k_avg=final_response_metrics["k_avg"],
+            final_voxel_eval=final_voxel_eval,
+            final_binary_voxel_eval=final_binary_voxel_eval,
             gif_path=gif_path,
             stl_exported=stl_exported,
         )

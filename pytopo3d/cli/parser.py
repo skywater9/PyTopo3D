@@ -118,6 +118,25 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         help="Selected support mask preset",
     )
+    variable_experiment_group.add_argument(
+        "--eval-material-presets",
+        nargs="+",
+        type=str,
+        default=None,
+        help=(
+            "Optional material presets used for debug final voxel evaluation. "
+            "The optimized xPhys is re-evaluated under each listed material."
+        ),
+    )
+    variable_experiment_group.add_argument(
+        "--eval-material-orientation-xyz",
+        type=str,
+        default=None,
+        help=(
+            "Optional orientation mapping for eval materials (x/y/z permutation). "
+            "Defaults to --material-orientation-xyz when omitted."
+        ),
+    )
 
     # Performance parameters
     performance_group = parser.add_argument_group("Performance parameters")
@@ -146,6 +165,16 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         type=float,
         default=0.5,
         help="Contour level for STL export (default: 0.5)",
+    )
+    output_group.add_argument(
+        "--export-mode",
+        type=str,
+        choices=["density", "binary", "blocky"],
+        default="density",
+        help=(
+            "STL export mode: density (current smooth density field), "
+            "binary (threshold first, no smoothing), or blocky (voxel cubes)"
+        ),
     )
     output_group.add_argument(
         "--smooth-stl",
@@ -247,6 +276,11 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     )
     log_group.add_argument(
         "--quiet", "-q", action="store_true", help="Suppress output (WARNING level)"
+    )
+    log_group.add_argument(
+        "--skip-optimization",
+        action="store_true",
+        help="Skip optimization and create a solid block for FEA testing",
     )
 
     return parser.parse_args(args)

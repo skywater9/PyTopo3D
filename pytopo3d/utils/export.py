@@ -15,6 +15,7 @@ def voxel_to_stl(
     input_file: Union[str, np.ndarray],
     output_file: Optional[str] = None,
     level: float = 0.5,
+    export_mode: str = "density",
     padding: int = 1,
     fix_mesh: bool = True,
     smooth_mesh: bool = True,
@@ -33,6 +34,8 @@ def voxel_to_stl(
         Defaults to None.
     level : float, optional
         Contour level for the marching cubes algorithm (default: 0.5)
+    export_mode : str, optional
+        STL export mode: "density", "binary", or "blocky" (default: "density")
     padding : int, optional
         Number of zero-voxel layers to pad around the volume (default: 1)
     fix_mesh : bool, optional
@@ -56,6 +59,97 @@ def voxel_to_stl(
         voxel_data = input_file
     else:
         raise TypeError("input_file must be a string path or a NumPy array.")
+
+    if export_mode not in {"density", "binary", "blocky"}:
+        raise ValueError(
+            "export_mode must be one of: 'density', 'binary', or 'blocky'."
+        )
+
+    if export_mode == "blocky":
+        # Build a watertight shell from occupied voxels by keeping only exposed faces.
+        occupancy = voxel_data >= level
+        if not np.any(occupancy):
+            raise ValueError(
+                "No occupied voxels found at or above STL level; cannot export blocky STL."
+            )
+
+        nx, ny, nz = occupancy.shape
+        vertices_list = []
+        faces_list = []
+        vertex_to_index = {}
+
+        def _add_vertex(vertex):
+            key = tuple(vertex)
+            idx = vertex_to_index.get(key)
+            if idx is None:
+                idx = len(vertices_list)
+                vertex_to_index[key] = idx
+                vertices_list.append(vertex)
+            return idx
+
+        def _add_quad(v0, v1, v2, v3):
+            i0 = _add_vertex(v0)
+            i1 = _add_vertex(v1)
+            i2 = _add_vertex(v2)
+            i3 = _add_vertex(v3)
+            faces_list.append([i0, i1, i2])
+            faces_list.append([i0, i2, i3])
+
+        occupied = np.argwhere(occupancy)
+        for i, j, k in occupied:
+            x0, x1 = float(i), float(i + 1)
+            y0, y1 = float(j), float(j + 1)
+            z0, z1 = float(k), float(k + 1)
+
+            # -X face
+            if i == 0 or not occupancy[i - 1, j, k]:
+                _add_quad((x0, y0, z0), (x0, y1, z0), (x0, y1, z1), (x0, y0, z1))
+            # +X face
+            if i == nx - 1 or not occupancy[i + 1, j, k]:
+                _add_quad((x1, y0, z0), (x1, y0, z1), (x1, y1, z1), (x1, y1, z0))
+            # -Y face
+            if j == 0 or not occupancy[i, j - 1, k]:
+                _add_quad((x0, y0, z0), (x0, y0, z1), (x1, y0, z1), (x1, y0, z0))
+            # +Y face
+            if j == ny - 1 or not occupancy[i, j + 1, k]:
+                _add_quad((x0, y1, z0), (x1, y1, z0), (x1, y1, z1), (x0, y1, z1))
+            # -Z face
+            if k == 0 or not occupancy[i, j, k - 1]:
+                _add_quad((x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0))
+            # +Z face
+            if k == nz - 1 or not occupancy[i, j, k + 1]:
+                _add_quad((x0, y0, z1), (x0, y1, z1), (x1, y1, z1), (x1, y0, z1))
+
+        mesh = trimesh.Trimesh(
+            vertices=np.asarray(vertices_list, dtype=float),
+            faces=np.asarray(faces_list, dtype=np.int64),
+            process=False,
+        )
+
+        if fix_mesh:
+            mesh = mesh.process(validate=True)
+
+        if output_file:
+            mesh.export(output_file)
+            if mesh.is_watertight:
+                print(f"Conversion complete! Watertight mesh saved as '{output_file}'")
+            else:
+                print(
+                    f"Conversion complete! Mesh saved as '{output_file}' (note: mesh may not be completely watertight)"
+                )
+            return output_file
+
+        if mesh.is_watertight:
+            print("Conversion complete! Watertight mesh generated.")
+        else:
+            print("Conversion complete! Mesh generated (note: mesh may not be completely watertight)")
+        return mesh
+
+    if export_mode == "binary":
+        voxel_data = (voxel_data >= level).astype(float)
+        smooth_mesh = False
+        smooth_iterations = 0
+        upscale_factor = None
 
     # 2. Pad the voxel data with zeros to ensure a closed mesh
     if padding > 0:
