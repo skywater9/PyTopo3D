@@ -459,6 +459,7 @@ def main():
             export_mode=getattr(args, "export_mode", "density"),
             smooth_stl=getattr(args, "smooth_stl", False),
             smooth_iterations=getattr(args, "smooth_iterations", 3),
+            combined_obstacle_mask=combined_obstacle_mask,
             logger=logger,
             results_mgr=results_mgr,
             result_path=result_path,

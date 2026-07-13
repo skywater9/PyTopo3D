@@ -396,6 +396,7 @@ def main(args: Optional[List[str]] = None) -> int:
             export_mode=getattr(parsed_args, "export_mode", "density"),
             smooth_stl=getattr(parsed_args, "smooth_stl", False),
             smooth_iterations=getattr(parsed_args, "smooth_iterations", 3),
+            combined_obstacle_mask=combined_obstacle_mask,
             logger=logger,
             results_mgr=results_mgr,
             result_path=result_path,
