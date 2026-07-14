@@ -210,7 +210,10 @@ def test_filter_matches_fortran_order_reference_on_rectangular_grid():
     np.testing.assert_allclose(H.diagonal(), rmin)
 
 
-def test_projected_oc_preserves_free_volume_and_fixed_regions():
+@pytest.mark.parametrize("sensitivity_scale", (1.0, 1.0e-18, 1.0e18))
+def test_projected_oc_preserves_free_volume_and_fixed_regions(
+    sensitivity_scale,
+):
     shape = (1, 6, 1)
     x = np.full(shape, 0.5)
     protected_solid = np.zeros(shape, dtype=bool)
@@ -234,7 +237,10 @@ def test_projected_oc_preserves_free_volume_and_fixed_regions():
         xp=np,
     )
     dc_dx = apply_density_filter_chain_rule(
-        -np.ones(shape), projection_derivative, H, Hs
+        -sensitivity_scale * np.ones(shape),
+        projection_derivative,
+        H,
+        Hs,
     )
     dv_dx = apply_density_filter_chain_rule(
         free_mask.astype(float), projection_derivative, H, Hs

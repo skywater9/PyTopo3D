@@ -55,6 +55,18 @@ def optimality_criteria_update_projected(
     dc_free = dc_dx[free_mask]
     dv_free = xp.maximum(dv_dx[free_mask], 1e-20)
 
+    # The Lagrange multiplier has the same scale as -dc/dv.  Normalize that
+    # ratio before bisection so the update is invariant to material units,
+    # element size, and load magnitude.  Without this normalization, the
+    # physically scaled PLA tensile sensitivities require a multiplier below
+    # the fixed bisection range and the update can severely underfill volume.
+    sensitivity_ratio = xp.maximum(-dc_free / dv_free, 0.0)
+    ratio_scale = float(xp.max(sensitivity_ratio).item())
+    if ratio_scale > 0.0:
+        sensitivity_ratio = sensitivity_ratio / ratio_scale
+    else:
+        sensitivity_ratio = xp.ones_like(sensitivity_ratio)
+
     lower_lambda = 0.0
     upper_lambda = 1.0e12
     best_x = x.copy()
@@ -63,7 +75,7 @@ def optimality_criteria_update_projected(
 
     for _ in range(max_bisection_iterations):
         lambda_mid = 0.5 * (lower_lambda + upper_lambda)
-        ratio = -dc_free / (lambda_mid * dv_free + 1e-30)
+        ratio = sensitivity_ratio / (lambda_mid + 1e-30)
         ratio = xp.maximum(ratio, 1e-30)
 
         candidate_free = x_free * xp.sqrt(ratio)
@@ -104,7 +116,7 @@ def optimality_criteria_update_projected(
 
         relative_interval = (upper_lambda - lower_lambda) / max(
             upper_lambda + lower_lambda,
-            1.0,
+            np.finfo(float).tiny,
         )
         if relative_interval < bisection_tolerance:
             break
