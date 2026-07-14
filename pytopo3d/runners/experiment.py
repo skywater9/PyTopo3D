@@ -7,7 +7,7 @@ This module contains functions for setting up and managing topology optimization
 import logging
 import os
 import time
-from typing import Dict, Optional, Tuple, Sequence
+from typing import Any, Dict, MutableMapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -112,6 +112,10 @@ def execute_optimization(
     combined_obstacle_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
     protected_zone_mask: Optional[np.ndarray] = None,
+    beta_schedule: Sequence[float] = (1.0, 2.0, 4.0, 8.0),
+    projection_eta: float = 0.5,
+    move: float = 0.2,
+    diagnostics_out: Optional[MutableMapping[str, Any]] = None,
 ) -> Tuple[np.ndarray, Optional[Dict], float, float, float]:
 
     """
@@ -149,7 +153,8 @@ def execute_optimization(
     logger.debug(
         f"Optimization parameters: tolx={tolx}, maxloop={maxloop}, "
         f"save_history={create_animation}, history_frequency={animation_frequency}, "
-        f"ndof={ndof}, use_gpu={use_gpu}"
+        f"ndof={ndof}, use_gpu={use_gpu}, beta_schedule={tuple(beta_schedule)}, "
+        f"projection_eta={projection_eta}"
     )
     if force_field is not None:
         logger.debug(f"Using provided force_field with shape {force_field.shape}")
@@ -184,6 +189,10 @@ def execute_optimization(
         history_frequency=animation_frequency,
         use_gpu=use_gpu,
         protected_zone_mask=protected_zone_mask,
+        beta_schedule=beta_schedule,
+        projection_eta=projection_eta,
+        move=move,
+        diagnostics_out=diagnostics_out,
     )
 
     # Check if we got history back
@@ -214,6 +223,7 @@ def export_result_to_stl(
     logger: logging.Logger = None,
     results_mgr: ResultsManager = None,
     result_path: str = None,
+    elem_size: float = 1.0,
 ) -> bool:
     """
     Export the optimization result as an STL file if requested.
@@ -273,6 +283,8 @@ def export_result_to_stl(
             export_mode=export_mode,
             smooth_mesh=smooth_stl,
             smooth_iterations=smooth_iterations,
+            elem_size=elem_size,
+            array_order="yxz",
         )
         if logger:
             logger.info(f"STL file exported to {stl_filename}")

@@ -12,7 +12,6 @@ from scipy.spatial import cKDTree  # Import cKDTree
 
 # Constants
 FLOAT_EPSILON = 1e-9  # Small epsilon for robust float comparisons
-DIST_EPSILON = 1e-12  # Small epsilon to avoid sqrt of zero
 
 # Check if CuPy is available for GPU acceleration
 try:
@@ -22,6 +21,102 @@ try:
     HAS_CUPY = True
 except ImportError:
     HAS_CUPY = False
+
+
+def heaviside_projection(
+    rho_filtered,
+    beta: float,
+    eta: float = 0.5,
+    xp=None,
+):
+    """Project a filtered density field and return its local derivative.
+
+    Parameters
+    ----------
+    rho_filtered : ndarray
+        Density-filtered design field.
+    beta : float
+        Positive projection sharpness.
+    eta : float
+        Projection threshold strictly between zero and one.
+    xp : module, optional
+        NumPy-compatible array module. Pass ``cupy`` for GPU arrays.
+    """
+    if xp is None:
+        xp = np
+
+    if not np.isfinite(beta) or beta <= 0:
+        raise ValueError(f"beta must be positive, got {beta}")
+    if not 0.0 < eta < 1.0:
+        raise ValueError(f"eta must be between 0 and 1, got {eta}")
+
+    denominator = xp.tanh(beta * eta) + xp.tanh(beta * (1.0 - eta))
+    shifted = beta * (rho_filtered - eta)
+    shifted_tanh = xp.tanh(shifted)
+
+    rho_physical = (xp.tanh(beta * eta) + shifted_tanh) / denominator
+    derivative = beta * (1.0 - shifted_tanh**2) / denominator
+
+    return xp.clip(rho_physical, 0.0, 1.0), derivative
+
+
+def build_physical_density(
+    x,
+    H,
+    Hs,
+    beta: float,
+    eta: float,
+    protected_solid,
+    protected_void,
+    xp=None,
+):
+    """Build the physical field used by FEA, volume control, and export.
+
+    Arrays retain the input design's shape. Internally, all element vectors use
+    Fortran order, matching :func:`pytopo3d.utils.assembly.build_edof`.
+    Protected design values are expected to already be present in ``x`` before
+    filtering, so they can influence neighboring free elements through the
+    density filter. After projection, protected solids/voids are forced to exact
+    physical densities and their local physical-density sensitivities are zeroed.
+    """
+    if xp is None:
+        xp = np
+
+    shape = x.shape
+    rho_filtered_flat = (H @ x.ravel(order="F")) / Hs
+    rho_filtered = rho_filtered_flat.reshape(shape, order="F")
+    rho_physical, projection_derivative = heaviside_projection(
+        rho_filtered,
+        beta=beta,
+        eta=eta,
+        xp=xp,
+    )
+
+    fixed_mask = protected_solid | protected_void
+    rho_physical = xp.where(protected_solid, 1.0, rho_physical)
+    rho_physical = xp.where(protected_void, 0.0, rho_physical)
+    projection_derivative = xp.where(fixed_mask, 0.0, projection_derivative)
+
+    return rho_filtered, rho_physical, projection_derivative
+
+
+def apply_density_filter_chain_rule(
+    physical_derivative,
+    projection_derivative,
+    H,
+    Hs,
+):
+    """Map a derivative from physical densities back to design variables.
+
+    This is the transpose derivative of ``rho_filtered = (H @ x) / Hs``.
+    The result has the same shape as ``physical_derivative`` and uses Fortran
+    element ordering.
+    """
+    shape = physical_derivative.shape
+    weighted_flat = (
+        physical_derivative * projection_derivative
+    ).ravel(order="F") / Hs
+    return (H.T @ weighted_flat).reshape(shape, order="F")
 
 
 def build_filter(
@@ -43,14 +138,19 @@ def build_filter(
     tuple
         (H, Hs) - filter matrix (CSR format) and row sums for normalization.
     """
+    if min(nelx, nely, nelz) < 1:
+        raise ValueError("nelx, nely, and nelz must all be positive")
+    if not np.isfinite(rmin) or rmin <= 0.0:
+        raise ValueError(f"rmin must be finite and positive, got {rmin}")
+
     nele = nelx * nely * nelz
 
-    # 1. Create coordinates for element centers (still needed for KD-Tree)
+    # 1. Create coordinates in the same (y, x, z), Fortran-flattened order
+    # used by masks, density arrays, and build_edof.
     x_coords = np.arange(nelx) + 0.5
     y_coords = np.arange(nely) + 0.5
     z_coords = np.arange(nelz) + 0.5
-    # Use 'ij' indexing consistent with element index calculation (k changes fastest)
-    zz, xx, yy = np.meshgrid(z_coords, x_coords, y_coords, indexing="ij")
+    yy, xx, zz = np.meshgrid(y_coords, x_coords, z_coords, indexing="ij")
     centers = np.vstack(
         (xx.ravel(order="F"), yy.ravel(order="F"), zz.ravel(order="F"))
     ).T
@@ -95,10 +195,7 @@ def build_filter(
             + (j1 - j2_neighbors) ** 2
             + (k1 - k2_neighbors) ** 2
         )
-        # Avoid sqrt of zero if e1 == e2
-        dist = np.sqrt(
-            np.maximum(dist_sq, DIST_EPSILON)
-        )  # Add tiny epsilon before sqrt
+        dist = np.sqrt(dist_sq)
 
         # Calculate filter weights (linear decay)
         weights = rmin - dist
@@ -207,7 +304,7 @@ def apply_filter(
             return filtered_gpu
     else:
         # CPU version
-        if isinstance(x, cp.ndarray):
+        if HAS_CUPY and isinstance(x, cp.ndarray):
             x_flat = cp.asnumpy(x).ravel(order='F')
         else:
             x_flat = x.ravel(order='F')

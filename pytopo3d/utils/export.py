@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +21,8 @@ def voxel_to_stl(
     smooth_mesh: bool = True,
     smooth_iterations: int = 5,
     upscale_factor: Optional[int] = 3,
+    elem_size: float = 1.0,
+    array_order: str = "xyz",
 ) -> Union[str, trimesh.Trimesh]:
     """
     Convert a voxel representation (.npy file or np.ndarray) to an STL mesh file or trimesh object.
@@ -45,7 +47,13 @@ def voxel_to_stl(
     smooth_iterations : int, optional
         Number of iterations for mesh smoothing (default: 5)
     upscale_factor : Optional[int], optional
-        Factor to upscale voxel resolution before meshing (default: None)
+        Factor to upscale voxel resolution before meshing (default: 3)
+    elem_size : float, optional
+        Physical edge length of one voxel. Output coordinates use the same
+        unit; PyTopo3D's CLI supplies meters (default: 1.0).
+    array_order : str, optional
+        Axis order of ``voxel_data``. Project density fields use ``"yxz"``;
+        direct XYZ volumes use the default ``"xyz"``.
 
     Returns:
     --------
@@ -59,6 +67,21 @@ def voxel_to_stl(
         voxel_data = input_file
     else:
         raise TypeError("input_file must be a string path or a NumPy array.")
+
+    if not np.isfinite(elem_size) or elem_size <= 0.0:
+        raise ValueError(f"elem_size must be positive, got {elem_size}")
+    if padding < 0:
+        raise ValueError(f"padding must be nonnegative, got {padding}")
+    if upscale_factor is not None and upscale_factor < 1:
+        raise ValueError("upscale_factor must be at least 1")
+    if array_order not in {"xyz", "yxz"}:
+        raise ValueError("array_order must be either 'xyz' or 'yxz'")
+
+    voxel_data = np.asarray(voxel_data, dtype=float)
+    if voxel_data.ndim != 3:
+        raise ValueError(f"voxel_data must be 3-D, got shape {voxel_data.shape}")
+    if array_order == "yxz":
+        voxel_data = voxel_data.transpose(1, 0, 2)
 
     if export_mode not in {"density", "binary", "blocky"}:
         raise ValueError(
@@ -125,6 +148,7 @@ def voxel_to_stl(
             faces=np.asarray(faces_list, dtype=np.int64),
             process=False,
         )
+        mesh.vertices *= elem_size
 
         if fix_mesh:
             mesh = mesh.process(validate=True)
@@ -159,30 +183,35 @@ def voxel_to_stl(
     else:
         padded_data = voxel_data
 
-    # 3. Upscale the voxel data if requested
+    # 3. Upscale the voxel data if requested. This is interpolation only; the
+    # incoming physical density has already been projected by the optimizer.
     if upscale_factor and upscale_factor > 1:
-        # Get the original shape
-        original_shape: np.ndarray = np.array(padded_data.shape)
-        # Calculate the new shape
-        new_shape: np.ndarray = original_shape * upscale_factor
-        # Create coordinates for the original data
-        orig_coords: List[np.ndarray] = [np.arange(s) for s in original_shape]
-        # Create coordinates for the upscaled data
-        new_coords: List[np.ndarray] = [
-            np.linspace(0, s - 1, ns) for s, ns in zip(original_shape, new_shape)
-        ]
-        # Use scipy's map_coordinates for smooth interpolation
-        grid: List[np.ndarray] = np.meshgrid(*new_coords, indexing="ij")
-        upscaled_data: np.ndarray = ndimage.map_coordinates(
-            padded_data, grid, order=3, mode="nearest"
+        padded_data = ndimage.zoom(
+            padded_data,
+            zoom=upscale_factor,
+            order=3,
+            mode="grid-constant",
+            cval=0.0,
+            prefilter=True,
+            grid_mode=True,
         )
-        padded_data = upscaled_data
+        # Cubic interpolation may overshoot the physical [0, 1] range.
+        padded_data = np.clip(padded_data, 0.0, 1.0)
 
     # 4. Generate a triangulated mesh using marching cubes algorithm
     vertices: np.ndarray
     faces: np.ndarray
     normals: np.ndarray
-    vertices, faces, normals, _ = measure.marching_cubes(padded_data, level=level)
+    refined_spacing = elem_size / (
+        upscale_factor if upscale_factor and upscale_factor > 1 else 1
+    )
+    vertices, faces, normals, _ = measure.marching_cubes(
+        padded_data,
+        level=level,
+        spacing=(refined_spacing, refined_spacing, refined_spacing),
+        method="lewiner",
+        gradient_direction="ascent",
+    )
 
     # 5. Create a mesh object
     mesh: trimesh.Trimesh = trimesh.Trimesh(
@@ -207,15 +236,9 @@ def voxel_to_stl(
             # Remove duplicate vertices
             mesh = mesh.process(validate=True)
 
-    # 8. If we padded the data, adjust the vertices to compensate
+    # 8. Remove the physical offset introduced by zero padding.
     if padding > 0:
-        # Calculate the scale factor if we upscaled
-        scale_factor: float = 1.0
-        if upscale_factor and upscale_factor > 1:
-            scale_factor = 1.0 / upscale_factor
-
-        # Shift the vertices back by the padding amount, adjusted for any scaling
-        mesh.vertices = (mesh.vertices * scale_factor) - (padding * scale_factor)
+        mesh.vertices -= padding * elem_size
 
     # 9. Save the mesh as an STL file or return the mesh object
     if output_file:

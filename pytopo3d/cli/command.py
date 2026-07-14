@@ -230,15 +230,19 @@ def main(args: Optional[List[str]] = None) -> int:
             protected_zone_mask=protected_zone_mask,
         )
 
+        optimization_diagnostics = {}
+
         # Run the optimization
         if getattr(parsed_args, "skip_optimization", False):
             # Skip optimization - create a solid block for FEA testing
             logger.info("Skipping optimization - creating solid block for FEA testing")
             start_time = time.time()
             xPhys = np.ones((parsed_args.nely, parsed_args.nelx, parsed_args.nelz))  # All solid (density = 1.0)
+            xPhys[combined_obstacle_mask] = 0.0
             history = None
             final_compliance = 0.0  # Placeholder
             run_time = time.time() - start_time
+            optimization_diagnostics["projection_enabled"] = False
         else:
             xPhys, history, final_compliance, _, run_time = execute_optimization(
                 nelx=parsed_args.nelx,
@@ -260,6 +264,12 @@ def main(args: Optional[List[str]] = None) -> int:
                 combined_obstacle_mask=combined_obstacle_mask,
                 use_gpu=parsed_args.gpu,
                 protected_zone_mask=protected_zone_mask,
+                beta_schedule=getattr(
+                    parsed_args, "beta_schedule", (1.0, 2.0, 4.0, 8.0)
+                ),
+                projection_eta=getattr(parsed_args, "projection_eta", 0.5),
+                move=getattr(parsed_args, "move_limit", 0.2),
+                diagnostics_out=optimization_diagnostics,
             )
 
         final_response_metrics = evaluate_fixed_geometry_metrics(
@@ -273,6 +283,9 @@ def main(args: Optional[List[str]] = None) -> int:
             protected_zone_mask=protected_zone_mask,
             use_gpu=parsed_args.gpu,
         )
+
+        if getattr(parsed_args, "skip_optimization", False):
+            final_compliance = final_response_metrics["compliance"]
 
         final_voxel_eval = None
         if eval_material_queue:
@@ -341,18 +354,8 @@ def main(args: Optional[List[str]] = None) -> int:
                     ratio_text,
                 )
 
-        # Save the result to the experiment directory
-        if force_field is not None and support_mask is not None:
-            force_mask_bool = np.any(force_field != 0, axis=-1)
-            support_mask_bool = support_mask.astype(bool)
-            union_mask = force_mask_bool | support_mask_bool
-            xPhys_union = xPhys.copy()
-            xPhys_union[union_mask] = 1.0
-            result_to_save = xPhys_union
-        else:
-            result_to_save = xPhys
-
-        result_path = results_mgr.save_result(result_to_save, "optimized_design.npy")
+        # Save the exact projected physical field used by FEA.
+        result_path = results_mgr.save_result(xPhys, "optimized_design.npy")
         logger.debug(f"Optimization result saved to {result_path}")
 
         # Create visualization of the final result
@@ -400,6 +403,7 @@ def main(args: Optional[List[str]] = None) -> int:
             logger=logger,
             results_mgr=results_mgr,
             result_path=result_path,
+            elem_size=parsed_args.elem_size,
         )
 
         terminal_input = " ".join(args)
@@ -444,6 +448,7 @@ def main(args: Optional[List[str]] = None) -> int:
             final_k_avg_z=final_response_metrics["k_avg_z"],
             final_k_avg=final_response_metrics["k_avg"],
             final_voxel_eval=final_voxel_eval,
+            optimization_metrics=optimization_diagnostics,
             gif_path=gif_path,
             stl_exported=stl_exported,
         )
