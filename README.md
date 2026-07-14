@@ -99,17 +99,50 @@ The main optimization parameters are:
 - `nelx`, `nely`, `nelz`: Number of elements in x, y, z directions (default: 60, 30, 20)
 - `volfrac`: Volume fraction constraint (0.0-1.0) (default: 0.3)
 - `penal`: Penalization power for SIMP method (default: 3.0)
-- `rmin`: Filter radius for sensitivity filtering (default: 3.0)
+- `rmin`: Radius of the density filter applied before projection (default: 3.0)
+- `beta_schedule`: Heaviside continuation stages (default: `1 2 4 8`)
+- `projection_eta`: Heaviside threshold (default: 0.5)
+- `move_limit`: Maximum OC design-variable change per iteration (default: 0.2)
 - `disp_thres`: Display threshold for 3D visualization (elements with density > disp_thres are shown) (default: 0.5)
 - `tolx`: Convergence tolerance on design change (default: 0.01)
-- `maxloop`: Maximum number of iterations (default: 2000)
+- `maxloop`: Maximum number of iterations per projection stage (default: 2000)
+
+The optimizer uses one consistent material field throughout the workflow:
+
+```text
+x with fixed design values
+  -> density filter
+  -> Heaviside projection
+  -> force protected solid/void physical densities exactly
+  -> rho_physical
+       |-> FEA
+       |-> free-volume constraint
+       |-> metrics and visualization
+       `-> NPY and STL export
+```
+
+The SIMP penalty stays fixed (3.0 by default) while beta advances through the
+continuation schedule. Each stage starts from the preceding stage's design;
+the design is not reinitialized. Volume fraction applies only to free design
+elements, excluding protected-solid and protected-void regions.
+Protected elements are clamped in the design field before filtering, then
+clamped again in the physical field after projection. Their physical-density
+sensitivities are set to zero before the chain rule maps sensitivities back to
+design variables. The filter can still let protected solid or void regions
+influence nearby free elements at their boundaries; this is intentional and is
+included in the attainable-volume feasibility checks.
+The optimizer checks the physical-volume range attainable after fixed regions
+pass through the density filter. A target below the attainable minimum is
+reported as infeasible before FEA; a target above the attainable maximum is an
+inactive upper bound and is recorded as such in the stage metrics.
 
 ### Command-line Interface
 
 To run a basic optimization:
 
 ```bash
-python main.py --nelx 32 --nely 16 --nelz 16 --volfrac 0.3 --penal 3.0 --rmin 3.0
+python main.py --nelx 32 --nely 16 --nelz 16 --volfrac 0.3 --penal 3.0 --rmin 3.0 \
+               --beta-schedule 1 2 4 8 --projection-eta 0.5
 ```
 
 For full options:
@@ -132,10 +165,12 @@ rmin = 3.0
 disp_thres = 0.5
 
 # Run optimization
-result = top3d(nelx, nely, nelz, volfrac, penal, rmin, disp_thres)
+rho_physical, history, compliance, _ = top3d(
+    nelx, nely, nelz, volfrac, penal, rmin, disp_thres
+)
 
 # Save result
-np.save("optimized_design.npy", result)
+np.save("optimized_design.npy", rho_physical)
 ```
 
 ## Advanced Features
@@ -289,12 +324,25 @@ python main.py --nelx 32 --nely 16 --nelz 16 \
 Options:
 - `--export-stl`: Flag to enable STL export of the final optimization result
 - `--export-mode`: STL export mode:
-  - `density`: current method (`xPhys` density field -> upsample -> marching cubes -> optional smoothing)
-  - `binary`: threshold first (`xPhys >= stl-level`) -> marching cubes, smoothing disabled
-  - `blocky`: voxel-cube export for occupied elements (`xPhys >= stl-level`)
+  - `density`: projected physical density -> 3x cubic interpolation -> marching cubes -> optional smoothing
+  - `binary`: threshold first (`rho_physical >= stl-level`) -> marching cubes, smoothing disabled
+  - `blocky`: voxel-cube export for occupied elements (`rho_physical >= stl-level`)
 - `--stl-level`: Contour level for the marching cubes algorithm (default: 0.5)
 - `--smooth-stl`: Flag to apply Laplacian smoothing to the mesh (default: True)
 - `--smooth-iterations`: Number of iterations for mesh smoothing (default: 5)
+
+Density export consumes the exact projected field returned by the optimizer;
+it does not apply a second Heaviside projection. Mesh coordinates are scaled by
+`elem_size`, and the internal `(nely, nelx, nelz)` array is mapped to XYZ at the
+export boundary.
+Because `elem_size` is specified in meters, exported STL coordinates are also
+in meters (STL itself does not encode a unit). Convert by 1000 when importing
+into software configured to interpret raw STL coordinates as millimeters.
+
+Each run records the final design-variable, filtered-density, and physical-
+density fractions over the free region, the 0.05--0.95 gray fraction, the final
+projection beta/eta, projected compliance, thresholded binary compliance, and
+their relative compliance difference.
 
 ### Animation Generation
 
@@ -360,7 +408,8 @@ By default, GPU acceleration is disabled even if a compatible GPU is available i
    )
    ```
 
-GPU acceleration primarily impacts the linear solver step (the most computationally intensive part) and sensitivity filtering operations.
+GPU acceleration primarily impacts the linear solver, density-filter/projection
+operations, and their compliance and volume chain rules.
 
 ### Experiment Management
 

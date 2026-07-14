@@ -196,16 +196,20 @@ def main():
             protected_zone_mask=protected_zone_mask,
         )
 
+        optimization_diagnostics = {}
+
         # Run the optimization - Passing force_field and support_mask
         if getattr(args, "skip_optimization", False):
             # Skip optimization - create a solid block for FEA testing
             logger.info("Skipping optimization - creating solid block for FEA testing")
             start_time = time.time()
             xPhys = np.ones((args.nely, args.nelx, args.nelz))  # All solid (density = 1.0)
+            xPhys[combined_obstacle_mask] = 0.0
             history = None
             final_compliance = 0.0  # Placeholder
             failure_force = 0.0
             run_time = time.time() - start_time
+            optimization_diagnostics["projection_enabled"] = False
         else:
             xPhys, history, final_compliance, failure_force, run_time = execute_optimization(
                 nelx=args.nelx,
@@ -226,7 +230,13 @@ def main():
                 logger=logger,
                 combined_obstacle_mask=combined_obstacle_mask,
                 use_gpu=args.gpu,
-                protected_zone_mask=protected_zone_mask
+                protected_zone_mask=protected_zone_mask,
+                beta_schedule=getattr(
+                    args, "beta_schedule", (1.0, 2.0, 4.0, 8.0)
+                ),
+                projection_eta=getattr(args, "projection_eta", 0.5),
+                move=getattr(args, "move_limit", 0.2),
+                diagnostics_out=optimization_diagnostics,
             )
 
         final_response_metrics = evaluate_fixed_geometry_metrics(
@@ -311,17 +321,6 @@ def main():
                     ratio_text,
                 )
 
-        # Save the result to the experiment directory
-
-        
-        # Make a union array for stl export that can be tested
-        force_mask_bool = np.any(force_field != 0, axis=-1)
-        support_mask_bool = support_mask.astype(bool)
-        union_mask = force_mask_bool | support_mask_bool
-
-        xPhys_union = xPhys.copy()
-        xPhys_union[union_mask] = 1.0
-
         # Binary evaluation mirrors the STL threshold exactly so the reported
         # compliance matches the pre-smoothing binary voxel behavior.
         binary_eval_level = float(getattr(args, "stl_level", 0.5))
@@ -337,7 +336,10 @@ def main():
             binary_eval_orientation = material_orientation_xyz
 
         final_binary_voxel_eval = []
-        x_binary = (xPhys_union >= binary_eval_level).astype(float)
+        x_binary = (xPhys >= binary_eval_level).astype(float)
+        if protected_zone_mask is not None:
+            x_binary[protected_zone_mask] = 1.0
+        x_binary[combined_obstacle_mask] = 0.0
         voxel_fill_fraction = float(np.mean(x_binary))
 
         for eval_material_preset in binary_eval_material_queue:
@@ -415,7 +417,8 @@ def main():
                 ratio_text,
             )
 
-        result_path = results_mgr.save_result(xPhys_union, "optimized_design.npy")
+        # xPhys is already the final projected physical field used by FEA.
+        result_path = results_mgr.save_result(xPhys, "optimized_design.npy")
         logger.debug(f"Optimization result saved to {result_path}")
 
         # Create visualization of the final result
@@ -463,6 +466,7 @@ def main():
             logger=logger,
             results_mgr=results_mgr,
             result_path=result_path,
+            elem_size=args.elem_size,
         )
 
         terminal_input = ' '.join(sys.argv[1:])
@@ -508,6 +512,7 @@ def main():
             final_k_avg=final_response_metrics["k_avg"],
             final_voxel_eval=final_voxel_eval,
             final_binary_voxel_eval=final_binary_voxel_eval,
+            optimization_metrics=optimization_diagnostics,
             gif_path=gif_path,
             stl_exported=stl_exported,
         )

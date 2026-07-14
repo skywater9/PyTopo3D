@@ -5,7 +5,7 @@ This module provides functions for collecting and reporting metrics from
 topology optimization runs.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import numpy as np
 
@@ -51,6 +51,7 @@ def collect_metrics(
     gif_path: Optional[str] = None,
     stl_exported: bool = False,
     skip_optimization: bool = False,
+    optimization_metrics: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
@@ -167,6 +168,9 @@ def collect_metrics(
         metrics["stl_export_mode"] = stl_export_mode
         metrics["stl_smoothed"] = effective_smoothed
         metrics["stl_smooth_iterations"] = smooth_iterations
+
+    if optimization_metrics:
+        metrics.update(dict(optimization_metrics))
 
     return metrics
 

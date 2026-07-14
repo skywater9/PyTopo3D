@@ -11,7 +11,7 @@ import numpy as np
 import scipy.sparse as sp
 
 # Import filtering function
-from pytopo3d.utils.filter import apply_filter, HAS_CUPY
+from pytopo3d.utils.filter import HAS_CUPY, apply_filter, build_physical_density
 
 # Check if CuPy is available for GPU acceleration
 try:
@@ -20,6 +20,100 @@ try:
     HAS_CUPY = True
 except ImportError:
     HAS_CUPY = False
+
+
+def optimality_criteria_update_projected(
+    x,
+    dc_dx,
+    dv_dx,
+    move: float,
+    target_free_volume: float,
+    H,
+    Hs,
+    beta: float,
+    eta: float,
+    free_mask,
+    protected_solid,
+    protected_void,
+    xp=None,
+    max_bisection_iterations: int = 80,
+    bisection_tolerance: float = 1e-8,
+):
+    """Apply an OC update whose constraint is projected physical volume.
+
+    Only density filtering and projection are repeated during bisection; the
+    displacement solution and compliance gradient remain fixed.
+    """
+    if xp is None:
+        xp = np
+    if not np.isfinite(move) or move <= 0:
+        raise ValueError(f"move must be positive, got {move}")
+    if max_bisection_iterations < 1:
+        raise ValueError("max_bisection_iterations must be at least 1")
+
+    x_free = x[free_mask]
+    dc_free = dc_dx[free_mask]
+    dv_free = xp.maximum(dv_dx[free_mask], 1e-20)
+
+    lower_lambda = 0.0
+    upper_lambda = 1.0e12
+    best_x = x.copy()
+    best_rho = None
+    best_volume_error = float("inf")
+
+    for _ in range(max_bisection_iterations):
+        lambda_mid = 0.5 * (lower_lambda + upper_lambda)
+        ratio = -dc_free / (lambda_mid * dv_free + 1e-30)
+        ratio = xp.maximum(ratio, 1e-30)
+
+        candidate_free = x_free * xp.sqrt(ratio)
+        candidate_free = xp.maximum(
+            x_free - move,
+            xp.minimum(x_free + move, candidate_free),
+        )
+        candidate_free = xp.clip(candidate_free, 0.0, 1.0)
+
+        candidate = x.copy()
+        candidate[free_mask] = candidate_free
+        candidate[protected_solid] = 1.0
+        candidate[protected_void] = 0.0
+
+        _, candidate_rho, _ = build_physical_density(
+            candidate,
+            H=H,
+            Hs=Hs,
+            beta=beta,
+            eta=eta,
+            protected_solid=protected_solid,
+            protected_void=protected_void,
+            xp=xp,
+        )
+        candidate_volume_scalar = float(
+            xp.sum(candidate_rho[free_mask]).item()
+        )
+        volume_error = abs(candidate_volume_scalar - target_free_volume)
+        if volume_error < best_volume_error:
+            best_x = candidate
+            best_rho = candidate_rho
+            best_volume_error = volume_error
+
+        if candidate_volume_scalar > target_free_volume:
+            lower_lambda = lambda_mid
+        else:
+            upper_lambda = lambda_mid
+
+        relative_interval = (upper_lambda - lower_lambda) / max(
+            upper_lambda + lower_lambda,
+            1.0,
+        )
+        if relative_interval < bisection_tolerance:
+            break
+
+    return best_x, best_rho
+
+
+# Concise public name used in the projection-method documentation.
+oc_update_projected = optimality_criteria_update_projected
 
 
 def optimality_criteria_update(
@@ -36,10 +130,13 @@ def optimality_criteria_update(
     use_gpu: bool = False
 ) -> Tuple[Union[np.ndarray, "cp.ndarray"], float]:
     
-    inputs_on_gpu = HAS_CUPY and any(
-        isinstance(arr, cp.ndarray) 
-        for arr in [x, dc, dv, obstacle_mask, protected_zone_mask, Hs]
-    ) or isinstance(H, cusp.csr_matrix)
+    inputs_on_gpu = HAS_CUPY and (
+        any(
+            isinstance(arr, cp.ndarray)
+            for arr in [x, dc, dv, obstacle_mask, protected_zone_mask, Hs]
+        )
+        or isinstance(H, cusp.csr_matrix)
+    )
     
     use_gpu_for_calc = (use_gpu and HAS_CUPY) or inputs_on_gpu
     l1, l2 = 1e-9, 1e9

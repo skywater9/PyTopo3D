@@ -46,6 +46,25 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     )
     basic_group.add_argument("--rmin", type=float, default=3.0, help="Filter radius")
     basic_group.add_argument(
+        "--beta-schedule",
+        nargs="+",
+        type=float,
+        default=[1.0, 2.0, 4.0, 8.0],
+        help="Heaviside projection continuation stages",
+    )
+    basic_group.add_argument(
+        "--projection-eta",
+        type=float,
+        default=0.5,
+        help="Heaviside projection threshold",
+    )
+    basic_group.add_argument(
+        "--move-limit",
+        type=float,
+        default=0.2,
+        help="Maximum OC design-variable change per iteration",
+    )
+    basic_group.add_argument(
         "--disp_thres",
         type=float,
         default=0.5,
@@ -59,9 +78,11 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     )
     basic_group.add_argument(
         "--maxloop",
+        "--max-iterations-per-stage",
+        dest="maxloop",
         type=int,
         default=2000,
-        help="Maximum number of iterations",
+        help="Maximum number of iterations in each projection stage",
     )
     basic_group.add_argument(
         "--target-nelx",
