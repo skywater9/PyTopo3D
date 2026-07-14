@@ -7,7 +7,9 @@ from pytopo3d.core.compliance import element_compliance
 from pytopo3d.core.optimizer import evaluate_fixed_geometry_compliance, top3d
 from pytopo3d.utils.assembly import (
     build_edof,
+    build_force_field,
     build_force_vector,
+    build_support_mask,
     build_supports,
 )
 from pytopo3d.utils.filter import (
@@ -123,6 +125,62 @@ def test_full_projected_compliance_gradient_matches_finite_difference():
         )
 
 
+def test_symmetric_tensile_update_preserves_end_to_end_symmetry():
+    nelx, nely, nelz = 4, 12, 2
+    force_field = build_force_field(
+        nelx,
+        nely,
+        nelz,
+        0,
+        nelx,
+        nely - 1,
+        nely,
+        0,
+        nelz,
+        0.0,
+        1.0,
+        0.0,
+    )
+    support_mask = build_support_mask(
+        nelx,
+        nely,
+        nelz,
+        0,
+        nelx,
+        0,
+        1,
+        0,
+        nelz,
+    )
+    protected = np.zeros((nely, nelx, nelz), dtype=bool)
+    protected[:3] = True
+    protected[-3:] = True
+
+    rho_physical, _, _, _ = top3d(
+        nelx=nelx,
+        nely=nely,
+        nelz=nelz,
+        volfrac=0.5,
+        penal=3.0,
+        rmin=2.0,
+        disp_thres=0.5,
+        force_field=force_field,
+        support_mask=support_mask,
+        protected_zone_mask=protected,
+        tolx=1.0e-12,
+        maxloop=1,
+        beta_schedule=(1.0,),
+    )
+
+    free_density = rho_physical[3:-3]
+    np.testing.assert_allclose(
+        free_density,
+        free_density[::-1],
+        rtol=0.0,
+        atol=1.0e-3,
+    )
+
+
 def test_continuation_returns_one_physical_field_and_records_metrics():
     nelx = nely = nelz = 2
     shape = (nely, nelx, nelz)
@@ -145,6 +203,7 @@ def test_continuation_returns_one_physical_field_and_records_metrics():
         force_field=force_field,
         support_mask=support_mask,
         obstacle_mask=obstacle_mask,
+        tolx=1.0e-12,
         maxloop=1,
         save_history=True,
         history_frequency=1,
@@ -175,7 +234,9 @@ def test_continuation_returns_one_physical_field_and_records_metrics():
     assert diagnostics["projection_beta_schedule"] == [1.0, 2.0]
     assert diagnostics["projection_beta"] == 2.0
     assert diagnostics["projection_total_iterations"] == 2
+    assert diagnostics["projection_converged"] is False
     for stage in diagnostics["projection_stage_summaries"]:
+        assert stage["converged"] is False
         assert stage["volume_fraction_error"] == pytest.approx(0.0, abs=1.0e-7)
     assert diagnostics["physical_density_fraction"] == pytest.approx(
         0.5,

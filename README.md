@@ -342,7 +342,9 @@ into software configured to interpret raw STL coordinates as millimeters.
 Each run records the final design-variable, filtered-density, and physical-
 density fractions over the free region, the 0.05--0.95 gray fraction, the final
 projection beta/eta, projected compliance, thresholded binary compliance, and
-their relative compliance difference.
+their relative compliance difference. Stage metrics also record whether the
+design-change tolerance was reached. A stage that exhausts `maxloop` is marked
+unconverged and emits a warning instead of being silently treated as complete.
 
 ### Animation Generation
 

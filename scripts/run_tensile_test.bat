@@ -8,8 +8,8 @@ cd /d "%~dp0.."
   --volfrac 0.5 ^
   --penal 3.0 ^
   --rmin 3.0 ^
-  --tolx 0.05 ^
-  --maxloop 100 ^
+  --tolx 0.01 ^
+  --maxloop 200 ^
   --elem-size 0.001 ^
   --export-stl ^
   --create-animation ^
