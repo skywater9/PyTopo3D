@@ -698,6 +698,16 @@ def top3d(
         stage_volume_fraction = float(
             xp.mean(rho_physical[free_work]).item()
         )
+        stage_converged = change <= tolx
+        if not stage_converged:
+            logger.warning(
+                "Projection stage beta=%g reached maxloop=%d without "
+                "converging: final change %.6e exceeds tolx %.6e.",
+                beta,
+                maxloop,
+                change,
+                tolx,
+            )
         stage_gray_fraction = float(
             xp.mean(
                 (
@@ -710,6 +720,7 @@ def top3d(
             {
                 "beta": float(beta),
                 "iterations": int(stage_loop),
+                "converged": bool(stage_converged),
                 "physical_density_fraction": stage_volume_fraction,
                 "volume_fraction_error": stage_volume_fraction - float(volfrac),
                 "gray_fraction_005_095": stage_gray_fraction,
@@ -798,6 +809,9 @@ def top3d(
         "physical_volume_fraction_error": float(np.mean(free_values) - volfrac),
         "projection_total_iterations": int(total_loop),
         "projection_stage_summaries": stage_summaries,
+        "projection_converged": all(
+            stage["converged"] for stage in stage_summaries
+        ),
         "projection_target_within_achievable_range": all(
             stage["target_within_achievable_range"] for stage in stage_summaries
         ),

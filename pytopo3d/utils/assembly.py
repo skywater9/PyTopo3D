@@ -9,6 +9,22 @@ from typing import Optional, Set, Tuple
 
 import numpy as np
 
+
+# Authoritative local-node ordering for every H8 element, expressed as
+# (x, y, z) offsets from the element's minimum corner.  The stiffness matrix
+# generator imports this convention so connectivity and element physics cannot
+# silently disagree about which physical corner owns each displacement triplet.
+H8_NODE_OFFSETS = (
+    (0, 0, 0),
+    (0, 1, 0),
+    (1, 1, 0),
+    (1, 0, 0),
+    (0, 0, 1),
+    (0, 1, 1),
+    (1, 1, 1),
+    (1, 0, 1),
+)
+
 def build_force_field(
     nelx: int,
     nely: int,
@@ -369,49 +385,17 @@ def build_edof(
         3 * edofVec_node_ids - 2
     )  # 3*nid - 2 -> x-dof ; 3*nid - 1 -> y-dof ; 3*nid -> z-dof
 
-    # Define the offsets to get the 24 DOFs of an H8 element relative to the first DOF
-    # Node order (local): 0,1,2,3 (bottom face z=0), 4,5,6,7 (top face z=1)
-    # Local node coords (y, x, z):
-    # 0:(0,0,0), 1:(1,0,0), 2:(1,1,0), 3:(0,1,0)
-    # 4:(0,0,1), 5:(1,0,1), 6:(1,1,1), 7:(0,1,1)
-    # DOFs follow node order: [node0_x, node0_y, node0_z, node1_x, ..., node7_z]
-    # Offsets calculated relative to edofVec (node0_x DOF)
-    dof_offsets = np.array(
-        [
-            0,
-            1,
-            2,  # Node 0 (iy=0, ix=0, iz=0)
-            3 * 1 + 0,
-            3 * 1 + 1,
-            3 * 1 + 2,  # Node 1 (iy=1, ix=0, iz=0) Offset=3*dy=3
-            3 * (nely + 1 + 1) + 0,
-            3 * (nely + 1 + 1) + 1,
-            3 * (nely + 1 + 1)
-            + 2,  # Node 2 (iy=1, ix=1, iz=0) Offset=3*(dx*(nely+1)+dy) = 3*(nely+1+1)
-            3 * (nely + 1) + 0,
-            3 * (nely + 1) + 1,
-            3 * (nely + 1)
-            + 2,  # Node 3 (iy=0, ix=1, iz=0) Offset=3*dx*(nely+1)=3*(nely+1)
-            3 * (nelx + 1) * (nely + 1) + 0,
-            3 * (nelx + 1) * (nely + 1) + 1,
-            3 * (nelx + 1) * (nely + 1)
-            + 2,  # Node 4 (iy=0, ix=0, iz=1) Offset=3*dz*(nelx+1)*(nely+1)
-            3 * (nelx + 1) * (nely + 1) + 3 * 1 + 0,
-            3 * (nelx + 1) * (nely + 1) + 3 * 1 + 1,
-            3 * (nelx + 1) * (nely + 1) + 3 * 1 + 2,  # Node 5 (iy=1, ix=0, iz=1)
-            3 * (nelx + 1) * (nely + 1) + 3 * (nely + 1 + 1) + 0,
-            3 * (nelx + 1) * (nely + 1) + 3 * (nely + 1 + 1) + 1,
-            3 * (nelx + 1) * (nely + 1)
-            + 3 * (nely + 1 + 1)
-            + 2,  # Node 6 (iy=1, ix=1, iz=1)
-            3 * (nelx + 1) * (nely + 1) + 3 * (nely + 1) + 0,
-            3 * (nelx + 1) * (nely + 1) + 3 * (nely + 1) + 1,
-            3 * (nelx + 1) * (nely + 1)
-            + 3 * (nely + 1)
-            + 2,  # Node 7 (iy=0, ix=1, iz=1)
-        ],
-        dtype=int,
+    # Convert the shared (x, y, z) corner convention into Fortran-numbered
+    # global node offsets, then expand every node into its x/y/z DOFs.
+    node_offsets_xyz = np.asarray(H8_NODE_OFFSETS, dtype=int)
+    node_offsets = (
+        node_offsets_xyz[:, 1]
+        + node_offsets_xyz[:, 0] * (nely + 1)
+        + node_offsets_xyz[:, 2] * (nelx + 1) * (nely + 1)
     )
+    dof_offsets = (
+        3 * node_offsets[:, np.newaxis] + np.arange(3, dtype=int)
+    ).ravel()
 
     # Build edofMat (nele, 24) containing 1-based global DOF indices for each element
     edofMat = edofVec[:, np.newaxis] + dof_offsets[np.newaxis, :]
