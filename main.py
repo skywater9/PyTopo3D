@@ -9,6 +9,7 @@ import sys
 import time
 import numpy as np
 
+from pytopo3d.analysis.postprocessing import evaluate_failure_representations
 from pytopo3d.cli.parser import parse_args
 from pytopo3d.core.optimizer import (
     evaluate_fixed_geometry_compliance,
@@ -25,7 +26,10 @@ from pytopo3d.utils.config_loader import (
     apply_material_orientation,
     get_force_field_params,
     get_material_params,
+    get_material_strength,
     get_support_mask_params,
+    material_has_strength,
+    material_orientation_matrix,
     parse_material_orientation_xyz,
 )
 from pytopo3d.utils.boundary import create_bc_visualization_arrays, create_bc_visualization_arrays_from_masks
@@ -109,6 +113,14 @@ def main():
                 logger.warning(
                     "--material-orientation-xyz was provided without --material-preset; orientation mapping is ignored."
                 )
+
+        material_strength = None
+        if material_preset is not None and material_has_strength(material_preset):
+            material_strength = get_material_strength(material_preset)
+            logger.info(
+                "Enabled final maximum-stress failure post-processing for material '%s'",
+                material_preset,
+            )
 
         eval_material_orientation_xyz = parse_material_orientation_xyz(
             getattr(args, "eval_material_orientation_xyz", None)
@@ -239,17 +251,51 @@ def main():
                 diagnostics_out=optimization_diagnostics,
             )
 
-        final_response_metrics = evaluate_fixed_geometry_metrics(
-            xPhys=xPhys,
-            penal=args.penal,
-            material_params=material_params,
-            elem_size=args.elem_size,
-            force_field=force_field,
-            support_mask=support_mask,
-            obstacle_mask=combined_obstacle_mask,
-            protected_zone_mask=protected_zone_mask,
-            use_gpu=args.gpu,
-        )
+        failure_postprocessing = None
+        if material_strength is not None:
+            failure_postprocessing = evaluate_failure_representations(
+                x_projected=xPhys,
+                binary_threshold=float(getattr(args, "stl_level", 0.5)),
+                penal=args.penal,
+                material_params=material_params,
+                strength=material_strength,
+                orientation_matrix=material_orientation_matrix(
+                    material_orientation_xyz
+                ),
+                elem_size=args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                use_gpu=args.gpu,
+                results_manager=results_mgr,
+            )
+            final_response_metrics = failure_postprocessing.projected_response
+            optimization_diagnostics.update(failure_postprocessing.metrics)
+            failure_force = failure_postprocessing.metrics[
+                "predicted_failure_load_projected"
+            ]
+            projected_fi = failure_postprocessing.metrics[
+                "failure_index_max_projected"
+            ]
+            binary_fi = failure_postprocessing.metrics["failure_index_max_binary"]
+            logger.info(
+                "Failure post-processing: projected FI=%s, binary FI=%s",
+                "n/a" if projected_fi is None else f"{projected_fi:.6e}",
+                "n/a" if binary_fi is None else f"{binary_fi:.6e}",
+            )
+        else:
+            final_response_metrics = evaluate_fixed_geometry_metrics(
+                xPhys=xPhys,
+                penal=args.penal,
+                material_params=material_params,
+                elem_size=args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                use_gpu=args.gpu,
+            )
 
         if getattr(args, "skip_optimization", False):
             final_compliance = final_response_metrics["compliance"]
@@ -336,10 +382,13 @@ def main():
             binary_eval_orientation = material_orientation_xyz
 
         final_binary_voxel_eval = []
-        x_binary = (xPhys >= binary_eval_level).astype(float)
-        if protected_zone_mask is not None:
-            x_binary[protected_zone_mask] = 1.0
-        x_binary[combined_obstacle_mask] = 0.0
+        if failure_postprocessing is not None:
+            x_binary = failure_postprocessing.binary_density.copy()
+        else:
+            x_binary = (xPhys >= binary_eval_level).astype(float)
+            if protected_zone_mask is not None:
+                x_binary[protected_zone_mask] = 1.0
+            x_binary[combined_obstacle_mask] = 0.0
         voxel_fill_fraction = float(np.mean(x_binary))
 
         for eval_material_preset in binary_eval_material_queue:
@@ -354,17 +403,27 @@ def main():
                 )
                 eval_material_name = eval_material_preset
 
-            eval_binary_metrics = evaluate_fixed_geometry_metrics(
-                xPhys=x_binary,
-                penal=args.penal,
-                material_params=eval_material_params,
-                elem_size=args.elem_size,
-                force_field=force_field,
-                support_mask=support_mask,
-                obstacle_mask=combined_obstacle_mask,
-                protected_zone_mask=protected_zone_mask,
-                use_gpu=args.gpu,
+            can_reuse_failure_solve = (
+                failure_postprocessing is not None
+                and eval_material_preset is not None
+                and material_preset is not None
+                and eval_material_preset.lower() == material_preset.lower()
+                and binary_eval_orientation == material_orientation_xyz
             )
+            if can_reuse_failure_solve:
+                eval_binary_metrics = failure_postprocessing.binary_response
+            else:
+                eval_binary_metrics = evaluate_fixed_geometry_metrics(
+                    xPhys=x_binary,
+                    penal=args.penal,
+                    material_params=eval_material_params,
+                    elem_size=args.elem_size,
+                    force_field=force_field,
+                    support_mask=support_mask,
+                    obstacle_mask=combined_obstacle_mask,
+                    protected_zone_mask=protected_zone_mask,
+                    use_gpu=args.gpu,
+                )
 
             final_binary_voxel_eval.append(
                 {

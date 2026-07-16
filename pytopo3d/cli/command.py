@@ -11,6 +11,7 @@ from typing import List, Optional
 import numpy as np
 
 # Import the main function from the main module
+from pytopo3d.analysis.postprocessing import evaluate_failure_representations
 from pytopo3d.cli.parser import parse_args
 from pytopo3d.core.optimizer import (
     evaluate_fixed_geometry_compliance,
@@ -33,7 +34,10 @@ from pytopo3d.utils.config_loader import (
     apply_material_orientation,
     get_force_field_params,
     get_material_params,
+    get_material_strength,
     get_support_mask_params,
+    material_has_strength,
+    material_orientation_matrix,
     parse_material_orientation_xyz,
 )
 from pytopo3d.utils.metrics import collect_metrics
@@ -133,6 +137,14 @@ def main(args: Optional[List[str]] = None) -> int:
                 logger.warning(
                     "--material-orientation-xyz was provided without --material-preset; orientation mapping is ignored."
                 )
+
+        material_strength = None
+        if material_preset is not None and material_has_strength(material_preset):
+            material_strength = get_material_strength(material_preset)
+            logger.info(
+                "Enabled final maximum-stress failure post-processing for material '%s'",
+                material_preset,
+            )
 
         eval_material_orientation_xyz = parse_material_orientation_xyz(
             getattr(parsed_args, "eval_material_orientation_xyz", None)
@@ -272,17 +284,47 @@ def main(args: Optional[List[str]] = None) -> int:
                 diagnostics_out=optimization_diagnostics,
             )
 
-        final_response_metrics = evaluate_fixed_geometry_metrics(
-            xPhys=xPhys,
-            penal=parsed_args.penal,
-            material_params=material_params,
-            elem_size=parsed_args.elem_size,
-            force_field=force_field,
-            support_mask=support_mask,
-            obstacle_mask=combined_obstacle_mask,
-            protected_zone_mask=protected_zone_mask,
-            use_gpu=parsed_args.gpu,
-        )
+        if material_strength is not None:
+            failure_postprocessing = evaluate_failure_representations(
+                x_projected=xPhys,
+                binary_threshold=float(getattr(parsed_args, "stl_level", 0.5)),
+                penal=parsed_args.penal,
+                material_params=material_params,
+                strength=material_strength,
+                orientation_matrix=material_orientation_matrix(
+                    material_orientation_xyz
+                ),
+                elem_size=parsed_args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                use_gpu=parsed_args.gpu,
+                results_manager=results_mgr,
+            )
+            final_response_metrics = failure_postprocessing.projected_response
+            optimization_diagnostics.update(failure_postprocessing.metrics)
+            projected_fi = failure_postprocessing.metrics[
+                "failure_index_max_projected"
+            ]
+            binary_fi = failure_postprocessing.metrics["failure_index_max_binary"]
+            logger.info(
+                "Failure post-processing: projected FI=%s, binary FI=%s",
+                "n/a" if projected_fi is None else f"{projected_fi:.6e}",
+                "n/a" if binary_fi is None else f"{binary_fi:.6e}",
+            )
+        else:
+            final_response_metrics = evaluate_fixed_geometry_metrics(
+                xPhys=xPhys,
+                penal=parsed_args.penal,
+                material_params=material_params,
+                elem_size=parsed_args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                use_gpu=parsed_args.gpu,
+            )
 
         if getattr(parsed_args, "skip_optimization", False):
             final_compliance = final_response_metrics["compliance"]

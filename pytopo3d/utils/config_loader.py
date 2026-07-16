@@ -215,6 +215,18 @@ def get_material_strength(material_name: str) -> MaterialStrength:
     )
 
 
+def material_has_strength(material_name: str) -> bool:
+    """Return whether a known preset declares strength data.
+
+    Declaration and validity are intentionally separate: callers should then
+    use :func:`get_material_strength`, which rejects incomplete or invalid data.
+    """
+    material = materials.get(material_name.lower())
+    if material is None:
+        raise ValueError(f"Material '{material_name}' not found.")
+    return "strength" in material
+
+
 def parse_material_orientation_xyz(material_orientation_xyz: Optional[str]) -> Optional[str]:
     """
     Validate and normalize a material orientation mapping string.

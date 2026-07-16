@@ -61,7 +61,8 @@ def evaluate_fixed_geometry_metrics(
     obstacle_mask: Optional[np.ndarray] = None,
     protected_zone_mask: Optional[np.ndarray] = None,
     use_gpu: bool = False,
-) -> Dict[str, Optional[float]]:
+    return_displacement: bool = False,
+) -> Dict[str, Any]:
     """
     Evaluate fixed-geometry response metrics under given material/BC settings.
 
@@ -71,6 +72,10 @@ def evaluate_fixed_geometry_metrics(
     - k_avg_{x,y,z}: directional equivalent stiffness F_dir / abs(u_dir)
     - k_avg: equivalent stiffness on dominant loading direction (legacy)
     - F_total and F_total_{x,y,z}: absolute load magnitudes
+
+    When ``return_displacement`` is true, the result additionally contains the
+    NumPy displacement vector and existing 1-based element DOF matrix needed by
+    Gauss-point recovery. The default response contract remains unchanged.
     """
     nely, nelx, nelz = xPhys.shape
     ndof = 3 * (nelx + 1) * (nely + 1) * (nelz + 1)
@@ -172,7 +177,7 @@ def evaluate_fixed_geometry_metrics(
         )[0]
         k_avg: Optional[float] = {"x": k_avg_x, "y": k_avg_y, "z": k_avg_z}[dominant_dir]
 
-        return {
+        response: Dict[str, Any] = {
             "compliance": compliance,
             "ux_avg_load_patch": ux_avg_load_patch,
             "uy_avg_load_patch": uy_avg_load_patch,
@@ -189,6 +194,10 @@ def evaluate_fixed_geometry_metrics(
             "loaded_y_dof_count": int(loaded_y_dofs.size),
             "loaded_z_dof_count": int(loaded_z_dofs.size),
         }
+        if return_displacement:
+            response["displacement"] = cp.asnumpy(U_gpu)
+            response["edof_matrix"] = edofMat.copy()
+        return response
 
     stiff = Emin + (x_eval.ravel(order="F") ** penal) * (E0 - Emin)
     elem_vals = np.kron(stiff, KE.ravel())
@@ -233,7 +242,7 @@ def evaluate_fixed_geometry_metrics(
     )[0]
     k_avg: Optional[float] = {"x": k_avg_x, "y": k_avg_y, "z": k_avg_z}[dominant_dir]
 
-    return {
+    response = {
         "compliance": float(c),
         "ux_avg_load_patch": ux_avg_load_patch,
         "uy_avg_load_patch": uy_avg_load_patch,
@@ -250,6 +259,10 @@ def evaluate_fixed_geometry_metrics(
         "loaded_y_dof_count": int(loaded_y_dofs.size),
         "loaded_z_dof_count": int(loaded_z_dofs.size),
     }
+    if return_displacement:
+        response["displacement"] = U.copy()
+        response["edof_matrix"] = edofMat.copy()
+    return response
 
 
 def evaluate_fixed_geometry_compliance(

@@ -79,6 +79,15 @@ Failure evaluation is available only for presets with a complete, validated
 Pa. The bundled `orthotropic_validation` preset is synthetic and exists only
 for verification; use measured process-specific strengths for engineering work.
 
+When a strength-aware preset is selected, every completed run performs separate
+projected-density and thresholded-binary solves. It records the exact maximum
+failure index, predicted first-failure load, zero-based critical element and
+Gauss-point indices, controlling mode, and separate design/fixture-region
+maxima. Detailed global/material stress and failure arrays are saved with
+`_projected.npy` and `_binary.npy` suffixes. This final reporting uses
+unrelaxed full-density material stress; only solid elements are eligible in the
+binary result.
+
 ## Installation
 
 You can install PyTopo3D in two ways:
