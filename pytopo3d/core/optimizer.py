@@ -106,6 +106,46 @@ def _mma_nonlinear_kkt_components(
     }
 
 
+def _expand_continuation_schedule(
+    values,
+    fallback: float,
+    number_of_stages: int,
+    *,
+    name: str,
+    minimum_exclusive: float,
+    direction: str,
+) -> tuple[float, ...]:
+    """Validate a scalar/broadcast continuation schedule."""
+    if values is None:
+        schedule = (float(fallback),) * number_of_stages
+    else:
+        try:
+            schedule = tuple(float(value) for value in values)
+        except TypeError:
+            schedule = (float(values),)
+        if len(schedule) == 1:
+            schedule = schedule * number_of_stages
+        elif len(schedule) != number_of_stages:
+            raise ValueError(
+                f"{name} must contain one value or {number_of_stages} values "
+                f"to match beta_schedule; got {len(schedule)}"
+            )
+    if any(
+        not np.isfinite(value) or value <= minimum_exclusive
+        for value in schedule
+    ):
+        raise ValueError(
+            f"all {name} values must be finite and > {minimum_exclusive:g}; "
+            f"got {schedule}"
+        )
+    differences = np.diff(schedule)
+    if direction == "nonincreasing" and np.any(differences > 1.0e-12):
+        raise ValueError(f"{name} must be nonincreasing; got {schedule}")
+    if direction == "nondecreasing" and np.any(differences < -1.0e-12):
+        raise ValueError(f"{name} must be nondecreasing; got {schedule}")
+    return schedule
+
+
 def evaluate_fixed_geometry_metrics(
     xPhys: np.ndarray,
     penal: float,
@@ -380,6 +420,9 @@ def top3d(
     failure_relaxation_exponent: float = 0.5,
     mma_move: float = 0.05,
     mma_min_density: float = 1.0e-3,
+    failure_limit_schedule: Optional[Sequence[float]] = None,
+    failure_aggregate_exponent_schedule: Optional[Sequence[float]] = None,
+    initial_design: Optional[np.ndarray] = None,
 ) -> Union[np.ndarray, Tuple[np.ndarray, Dict[str, Any]], Optional[np.ndarray], float]:
     """Run density-filtered SIMP optimization with Heaviside continuation.
 
@@ -477,6 +520,38 @@ def top3d(
         raise ValueError(
             f"all beta_schedule values must be finite and positive, got {beta_schedule}"
         )
+    if np.any(np.diff(beta_schedule) < -1.0e-12):
+        raise ValueError(f"beta_schedule must be nondecreasing, got {beta_schedule}")
+    if not failure_constrained and (
+        failure_limit_schedule is not None
+        or failure_aggregate_exponent_schedule is not None
+    ):
+        raise ValueError(
+            "failure continuation schedules require "
+            "optimization_mode='compliance_failure_constrained'"
+        )
+    if failure_constrained:
+        stage_failure_limits = _expand_continuation_schedule(
+            failure_limit_schedule,
+            failure_limit,
+            len(beta_schedule),
+            name="failure_limit_schedule",
+            minimum_exclusive=0.0,
+            direction="nonincreasing",
+        )
+        stage_failure_exponents = _expand_continuation_schedule(
+            failure_aggregate_exponent_schedule,
+            failure_aggregate_exponent,
+            len(beta_schedule),
+            name="failure_aggregate_exponent_schedule",
+            minimum_exclusive=1.0,
+            direction="nondecreasing",
+        )
+    else:
+        stage_failure_limits = (failure_limit,) * len(beta_schedule)
+        stage_failure_exponents = (failure_aggregate_exponent,) * len(
+            beta_schedule
+        )
 
     obstacle_mask = (
         np.zeros(expected_shape, dtype=bool)
@@ -540,6 +615,26 @@ def top3d(
     design_nele = int(np.sum(free_mask))
     if design_nele == 0:
         raise ValueError("optimization requires at least one free design element")
+    initial_design_array = None
+    if initial_design is not None:
+        initial_design_array = np.asarray(initial_design, dtype=float).copy()
+        if initial_design_array.shape != expected_shape:
+            raise ValueError(
+                f"initial_design has shape {initial_design_array.shape}, "
+                f"expected {expected_shape}"
+            )
+        if not np.all(np.isfinite(initial_design_array)):
+            raise ValueError("initial_design must contain only finite values")
+        if np.any(initial_design_array < 0.0) or np.any(
+            initial_design_array > 1.0
+        ):
+            raise ValueError("initial_design values must lie in [0, 1]")
+        free_lower_bound = mma_min_density if failure_constrained else 0.0
+        if np.any(initial_design_array[free_mask] < free_lower_bound):
+            raise ValueError(
+                "initial_design free values must be at least "
+                f"{free_lower_bound:g} for the selected optimization mode"
+            )
     target_free_volume = float(volfrac * design_nele)
     nele = nelx * nely * nelz
     ndof = 3 * (nelx + 1) * (nely + 1) * (nelz + 1)
@@ -567,6 +662,8 @@ def top3d(
                 "volume_constraint_history": [],
                 "mma_kkt_residual_history": [],
                 "mma_subproblem_kkt_residual_history": [],
+                "mma_record_kind_history": [],
+                "mma_restored_from_iteration_history": [],
             }
         )
         if failure_constrained:
@@ -576,6 +673,8 @@ def top3d(
                     "failure_exact_max_history": [],
                     "failure_constraint_history": [],
                     "failure_constraint_violation_history": [],
+                    "failure_limit_history": [],
+                    "failure_aggregate_exponent_history": [],
                     "critical_failure_mode_history": [],
                     "critical_element_history": [],
                     "predicted_failure_load_history": [],
@@ -656,7 +755,11 @@ def top3d(
     initial_free_density = (
         max(volfrac, mma_min_density) if failure_constrained else volfrac
     )
-    x = xp.full(expected_shape, initial_free_density, dtype=float)
+    x = (
+        xp.full(expected_shape, initial_free_density, dtype=float)
+        if initial_design_array is None
+        else xp.asarray(initial_design_array)
+    )
     x[protected_solid_work] = 1.0
     x[protected_void_work] = 0.0
 
@@ -676,12 +779,71 @@ def top3d(
             return cp.asnumpy(array)
         return np.asarray(array).copy()
 
+    def append_mma_history_record(record, density):
+        """Append one evaluated/restored MMA design to aligned histories."""
+        history["density_history"].append(to_numpy(density))
+        history["iteration_history"].append(record["iteration"])
+        history["compliance_history"].append(record["compliance"])
+        history["beta_history"].append(record["beta"])
+        history["volume_constraint_history"].append(
+            record["volume_constraint"]
+        )
+        history["mma_kkt_residual_history"].append(
+            record["mma_kkt_residual"]
+        )
+        history["mma_subproblem_kkt_residual_history"].append(
+            record.get("mma_subproblem_kkt_residual")
+        )
+        history["mma_record_kind_history"].append(
+            "restoration"
+            if record.get("continuation_restoration", False)
+            else "evaluation"
+        )
+        history["mma_restored_from_iteration_history"].append(
+            record.get("restored_from_iteration")
+        )
+        if failure_constrained:
+            history["failure_aggregate_history"].append(
+                record["failure_aggregate"]
+            )
+            history["failure_exact_max_history"].append(
+                record["failure_exact_max"]
+            )
+            history["failure_constraint_history"].append(
+                record["failure_constraint"]
+            )
+            history["failure_constraint_violation_history"].append(
+                record["failure_constraint_violation"]
+            )
+            history["failure_limit_history"].append(record["failure_limit"])
+            history["failure_aggregate_exponent_history"].append(
+                record["failure_aggregate_exponent"]
+            )
+            history["critical_failure_mode_history"].append(
+                record["critical_failure_mode"]
+            )
+            history["critical_element_history"].append(
+                record["critical_element"]
+            )
+            history["predicted_failure_load_history"].append(
+                record["predicted_failure_load"]
+            )
+
+    def design_checksum(design):
+        """Compact deterministic checksum used to audit stage warm starts."""
+        free_values = np.asarray(design).ravel(order="F")[
+            free_mask.ravel(order="F")
+        ]
+        weights = np.arange(1, free_values.size + 1, dtype=float)
+        return float(np.dot(free_values, weights) / np.sum(weights))
+
     def evaluate_failure_iteration(
         reduced_stiffness,
         displacement,
         physical_density,
         projection_derivative,
         correction_factor,
+        aggregate_exponent,
     ):
         """Evaluate one failure aggregate and its full design derivative."""
         displacement_numpy = to_numpy(displacement)
@@ -697,7 +859,7 @@ def top3d(
                 material_strength,
                 elem_size=elem_size,
                 relaxation_exponent=failure_relaxation_exponent,
-                aggregate_exponent=failure_aggregate_exponent,
+                aggregate_exponent=aggregate_exponent,
                 correction_factor=frozen_correction,
                 eligible_elements=failure_eligible,
             )
@@ -706,7 +868,7 @@ def top3d(
             uncorrected = build_partials(1.0)
             correction_factor = calibrate_pnorm_correction(
                 uncorrected.aggregate_result.element_failure_index,
-                exponent=failure_aggregate_exponent,
+                exponent=aggregate_exponent,
                 eligible=failure_eligible,
             )
         partials = build_partials(correction_factor)
@@ -841,9 +1003,19 @@ def top3d(
     last_failure_iteration = None
     mma_abort = False
     last_executed_beta = beta_schedule[0]
+    last_executed_failure_limit = stage_failure_limits[0]
+    last_executed_failure_exponent = stage_failure_exponents[0]
 
-    for beta in beta_schedule:
+    for stage_index, (
+        beta,
+        stage_failure_limit,
+        stage_failure_exponent,
+    ) in enumerate(
+        zip(beta_schedule, stage_failure_limits, stage_failure_exponents)
+    ):
         last_executed_beta = beta
+        last_executed_failure_limit = stage_failure_limit
+        last_executed_failure_exponent = stage_failure_exponent
         logger.info("Starting projection stage: beta=%g", beta)
         # MMA may use its entire evaluation budget before taking an update
         # (notably maxloop=1), and a failed first subproblem must still produce
@@ -860,6 +1032,10 @@ def top3d(
         failure_correction_factor = None
         stage_last_constraint_violation = float("inf")
         stage_last_subproblem_kkt = float("nan")
+        stage_start_design = to_numpy(x)
+        stage_best_feasible_snapshot = None
+        stage_least_violation_snapshot = None
+        stage_restored_iteration = None
 
         rho_filtered, rho_physical, projection_derivative = build_physical_density(
             x,
@@ -1005,6 +1181,7 @@ def top3d(
                         rho_used_for_fea,
                         projection_derivative,
                         failure_correction_factor,
+                        stage_failure_exponent,
                     )
                     failure_correction_factor = failure_iteration[
                         "correction_factor"
@@ -1012,10 +1189,13 @@ def top3d(
                     failure_aggregate = failure_iteration[
                         "partials"
                     ].aggregate_result.aggregate
-                    failure_constraint = failure_aggregate / failure_limit - 1.0
+                    failure_constraint = (
+                        failure_aggregate / stage_failure_limit - 1.0
+                    )
                     constraint_values.append(failure_constraint)
                     constraint_gradient_fields.append(
-                        failure_iteration["design_derivative"] / failure_limit
+                        failure_iteration["design_derivative"]
+                        / stage_failure_limit
                     )
                     last_failure_iteration = failure_iteration
 
@@ -1028,7 +1208,8 @@ def top3d(
                         for field in constraint_gradient_fields
                     ]
                 )
-                x_free = to_numpy(x).ravel(order="F")[
+                current_design_numpy = to_numpy(x)
+                x_free = current_design_numpy.ravel(order="F")[
                     free_mask.ravel(order="F")
                 ]
                 objective_gradient_free = to_numpy(dc_dx).ravel(order="F")[
@@ -1073,7 +1254,18 @@ def top3d(
 
                 mma_iteration_record = {
                     "iteration": int(total_loop - 1),
+                    "continuation_stage": int(stage_index),
                     "beta": float(beta),
+                    "failure_limit": (
+                        float(stage_failure_limit)
+                        if failure_constrained
+                        else None
+                    ),
+                    "failure_aggregate_exponent": (
+                        float(stage_failure_exponent)
+                        if failure_constrained
+                        else None
+                    ),
                     "compliance": float(c),
                     "physical_density_fraction": current_volume_fraction,
                     "volume_constraint": float(volume_constraint),
@@ -1115,46 +1307,107 @@ def top3d(
                         }
                     )
 
+                snapshot = (
+                    current_design_numpy.copy(),
+                    dict(mma_iteration_record),
+                )
+                if (
+                    stage_least_violation_snapshot is None
+                    or stage_last_constraint_violation
+                    < stage_least_violation_snapshot[1][
+                        "max_constraint_violation"
+                    ]
+                    - 1.0e-12
+                    or (
+                        np.isclose(
+                            stage_last_constraint_violation,
+                            stage_least_violation_snapshot[1][
+                                "max_constraint_violation"
+                            ],
+                        )
+                        and c
+                        < stage_least_violation_snapshot[1]["compliance"]
+                    )
+                ):
+                    stage_least_violation_snapshot = snapshot
+                if stage_last_constraint_violation <= 1.0e-3 and (
+                    stage_best_feasible_snapshot is None
+                    or c < stage_best_feasible_snapshot[1]["compliance"]
+                ):
+                    stage_best_feasible_snapshot = snapshot
+
                 if stop_before_update:
                     x_new = x.copy()
                     rho_new = rho_physical.copy()
                     mma_stage_finished = True
                 else:
-                    mma_result = mma_update(
-                        x_free,
-                        c,
-                        objective_gradient_free,
-                        constraint_values,
-                        constraint_gradients,
-                        lower_bounds=(
-                            mma_min_density if failure_constrained else 0.0
-                        ),
-                        upper_bounds=1.0,
-                        move_limit=mma_move,
-                        state=mma_state,
-                        objective_reference=mma_objective_reference,
-                    )
-                    mma_state = mma_result.state
-                    mma_objective_reference = mma_state.objective_reference
-                    mma_diagnostics = mma_result.diagnostics
-                    stage_last_subproblem_kkt = (
-                        mma_diagnostics.subproblem_kkt_residual
-                    )
-                    mma_iteration_record.update(
-                        {
-                            "mma_subproblem_kkt_residual": float(
-                                mma_diagnostics.subproblem_kkt_residual
-                            ),
-                            "mma_subproblem_slack": (
-                                mma_diagnostics.slack_variables.tolist()
-                            ),
-                            "mma_dual_status": int(mma_diagnostics.dual_status),
-                            "mma_dual_success": bool(
-                                mma_diagnostics.dual_success
-                            ),
-                        }
-                    )
-                    if not mma_diagnostics.dual_success:
+                    previous_mma_state = mma_state
+                    subproblem_attempts = []
+                    mma_result = None
+                    mma_result_move_limit = None
+                    for move_factor in (1.0, 0.5, 0.25):
+                        attempted_move = mma_move * move_factor
+                        try:
+                            candidate_result = mma_update(
+                                x_free,
+                                c,
+                                objective_gradient_free,
+                                constraint_values,
+                                constraint_gradients,
+                                lower_bounds=(
+                                    mma_min_density
+                                    if failure_constrained
+                                    else 0.0
+                                ),
+                                upper_bounds=1.0,
+                                move_limit=attempted_move,
+                                state=previous_mma_state,
+                                objective_reference=mma_objective_reference,
+                            )
+                        except (
+                            RuntimeError,
+                            FloatingPointError,
+                            np.linalg.LinAlgError,
+                        ) as exc:
+                            subproblem_attempts.append(
+                                {
+                                    "move_limit": float(attempted_move),
+                                    "kkt_residual": None,
+                                    "success": False,
+                                    "error_type": type(exc).__name__,
+                                    "error": str(exc),
+                                }
+                            )
+                            continue
+                        subproblem_attempts.append(
+                            {
+                                "move_limit": float(attempted_move),
+                                "kkt_residual": float(
+                                    candidate_result.diagnostics
+                                    .subproblem_kkt_residual
+                                ),
+                                "success": bool(
+                                    candidate_result.diagnostics.dual_success
+                                ),
+                            }
+                        )
+                        mma_result = candidate_result
+                        mma_result_move_limit = attempted_move
+                        if candidate_result.diagnostics.dual_success:
+                            break
+                    if mma_result is None:
+                        mma_iteration_record.update(
+                            {
+                                "mma_subproblem_kkt_residual": None,
+                                "mma_subproblem_slack": None,
+                                "mma_dual_status": None,
+                                "mma_dual_success": False,
+                                "mma_effective_move_limit": (
+                                    subproblem_attempts[-1]["move_limit"]
+                                ),
+                                "mma_subproblem_attempts": subproblem_attempts,
+                            }
+                        )
                         mma_subproblem_failed = True
                         mma_stage_finished = True
                         mma_abort = True
@@ -1162,32 +1415,66 @@ def top3d(
                         x_new = x.copy()
                         rho_new = rho_physical.copy()
                     else:
-                        x_new = x.copy()
-                        updated_free = (
-                            cp.asarray(mma_result.x_new)
-                            if gpu
-                            else mma_result.x_new
+                        mma_state = mma_result.state
+                        mma_objective_reference = mma_state.objective_reference
+                        mma_diagnostics = mma_result.diagnostics
+                        stage_last_subproblem_kkt = (
+                            mma_diagnostics.subproblem_kkt_residual
                         )
-                        x_new[free_work] = updated_free
-                        x_new[protected_solid_work] = 1.0
-                        x_new[protected_void_work] = 0.0
-                        _, rho_new, _ = build_physical_density(
-                            x_new,
-                            H=H_work,
-                            Hs=Hs_work,
-                            beta=beta,
-                            eta=projection_eta,
-                            protected_solid=protected_solid_work,
-                            protected_void=protected_void_work,
-                            xp=xp,
+                        mma_iteration_record.update(
+                            {
+                                "mma_subproblem_kkt_residual": float(
+                                    mma_diagnostics.subproblem_kkt_residual
+                                ),
+                                "mma_subproblem_slack": (
+                                    mma_diagnostics.slack_variables.tolist()
+                                ),
+                                "mma_dual_status": int(
+                                    mma_diagnostics.dual_status
+                                ),
+                                "mma_dual_success": bool(
+                                    mma_diagnostics.dual_success
+                                ),
+                                "mma_effective_move_limit": (
+                                    float(mma_result_move_limit)
+                                ),
+                                "mma_subproblem_attempts": subproblem_attempts,
+                            }
                         )
-                        change = float(
-                            xp.max(
-                                xp.abs(x_new[free_work] - x[free_work])
-                            ).item()
-                        )
-                        x = x_new
-                        rho_physical = rho_new
+                        if not mma_diagnostics.dual_success:
+                            mma_subproblem_failed = True
+                            mma_stage_finished = True
+                            mma_abort = True
+                            mma_termination_status = "subproblem_failed"
+                            x_new = x.copy()
+                            rho_new = rho_physical.copy()
+                        else:
+                            x_new = x.copy()
+                            updated_free = (
+                                cp.asarray(mma_result.x_new)
+                                if gpu
+                                else mma_result.x_new
+                            )
+                            x_new[free_work] = updated_free
+                            x_new[protected_solid_work] = 1.0
+                            x_new[protected_void_work] = 0.0
+                            _, rho_new, _ = build_physical_density(
+                                x_new,
+                                H=H_work,
+                                Hs=Hs_work,
+                                beta=beta,
+                                eta=projection_eta,
+                                protected_solid=protected_solid_work,
+                                protected_void=protected_void_work,
+                                xp=xp,
+                            )
+                            change = float(
+                                xp.max(
+                                    xp.abs(x_new[free_work] - x[free_work])
+                                ).item()
+                            )
+                            x = x_new
+                            rho_physical = rho_new
 
                 mma_iteration_records.append(mma_iteration_record)
 
@@ -1201,46 +1488,18 @@ def top3d(
                 or stage_loop == maxloop
                 or mma_stage_finished
             ):
-                history["density_history"].append(to_numpy(rho_used_for_fea))
-                history["iteration_history"].append(total_loop - 1)
-                history["compliance_history"].append(c)
-                history["beta_history"].append(beta)
                 if optimizer == "mma":
-                    history["volume_constraint_history"].append(
-                        mma_iteration_record["volume_constraint"]
+                    append_mma_history_record(
+                        mma_iteration_record,
+                        rho_used_for_fea,
                     )
-                    history["mma_kkt_residual_history"].append(
-                        mma_iteration_record["mma_kkt_residual"]
+                else:
+                    history["density_history"].append(
+                        to_numpy(rho_used_for_fea)
                     )
-                    history["mma_subproblem_kkt_residual_history"].append(
-                        mma_iteration_record.get(
-                            "mma_subproblem_kkt_residual", None
-                        )
-                    )
-                    if failure_constrained:
-                        history["failure_aggregate_history"].append(
-                            mma_iteration_record["failure_aggregate"]
-                        )
-                        history["failure_exact_max_history"].append(
-                            mma_iteration_record["failure_exact_max"]
-                        )
-                        history["failure_constraint_history"].append(
-                            mma_iteration_record["failure_constraint"]
-                        )
-                        history["failure_constraint_violation_history"].append(
-                            mma_iteration_record[
-                                "failure_constraint_violation"
-                            ]
-                        )
-                        history["critical_failure_mode_history"].append(
-                            mma_iteration_record["critical_failure_mode"]
-                        )
-                        history["critical_element_history"].append(
-                            mma_iteration_record["critical_element"]
-                        )
-                        history["predicted_failure_load_history"].append(
-                            mma_iteration_record["predicted_failure_load"]
-                        )
+                    history["iteration_history"].append(total_loop - 1)
+                    history["compliance_history"].append(c)
+                    history["beta_history"].append(beta)
 
             if optimizer == "oc":
                 logger.info(
@@ -1292,6 +1551,107 @@ def top3d(
                 )
             )
 
+        stage_continuation_feasible = None
+        stage_restoration_linf = 0.0
+        stage_subproblem_failure_recovered = False
+        if optimizer == "mma":
+            stage_continuation_feasible = (
+                stage_best_feasible_snapshot is not None
+            )
+            selected_snapshot = None
+            if not mma_stage_converged:
+                selected_snapshot = (
+                    stage_best_feasible_snapshot
+                    if stage_best_feasible_snapshot is not None
+                    else stage_least_violation_snapshot
+                )
+            if selected_snapshot is not None:
+                selected_design, selected_record = selected_snapshot
+                current_design = to_numpy(x)
+                stage_restoration_linf = float(
+                    np.max(
+                        np.abs(
+                            selected_design[free_mask]
+                            - current_design[free_mask]
+                        )
+                    )
+                )
+                selected_is_current = (
+                    mma_iteration_records
+                    and selected_record["iteration"]
+                    == mma_iteration_records[-1]["iteration"]
+                    and stage_restoration_linf <= 1.0e-14
+                )
+                if not selected_is_current:
+                    x = (
+                        cp.asarray(selected_design)
+                        if gpu
+                        else selected_design.copy()
+                    )
+                    x[protected_solid_work] = 1.0
+                    x[protected_void_work] = 0.0
+                    rho_filtered, rho_physical, projection_derivative = (
+                        build_physical_density(
+                            x,
+                            H=H_work,
+                            Hs=Hs_work,
+                            beta=beta,
+                            eta=projection_eta,
+                            protected_solid=protected_solid_work,
+                            protected_void=protected_void_work,
+                            xp=xp,
+                        )
+                    )
+                    restored_record = dict(selected_record)
+                    restored_record.update(
+                        {
+                            "iteration": int(total_loop - 1),
+                            "continuation_restoration": True,
+                            "restored_from_iteration": int(
+                                selected_record["iteration"]
+                            ),
+                        }
+                    )
+                    mma_iteration_records.append(restored_record)
+                    stage_restored_iteration = int(
+                        selected_record["iteration"]
+                    )
+                    if save_history:
+                        append_mma_history_record(
+                            restored_record,
+                            rho_physical,
+                        )
+                last_mma_constraints = np.asarray(
+                    [
+                        selected_record["volume_constraint"],
+                        *(
+                            [selected_record["failure_constraint"]]
+                            if failure_constrained
+                            else []
+                        ),
+                    ],
+                    dtype=float,
+                )
+                last_mma_kkt = dict(selected_record["mma_kkt_components"])
+                stage_last_constraint_violation = float(
+                    selected_record["max_constraint_violation"]
+                )
+                c = float(selected_record["compliance"])
+            if (
+                mma_abort
+                and mma_termination_status == "subproblem_failed"
+                and stage_continuation_feasible
+            ):
+                # The rejected subproblem never changed x. A previously
+                # evaluated feasible design is therefore a safe continuation
+                # point after resetting the stage-local MMA state.
+                stage_subproblem_failure_recovered = True
+                mma_abort = False
+                mma_termination_status = None
+            if not stage_continuation_feasible and not mma_abort:
+                mma_termination_status = "continuation_stage_infeasible"
+                mma_abort = True
+
         stage_volume_fraction = float(
             xp.mean(rho_physical[free_work]).item()
         )
@@ -1330,15 +1690,60 @@ def top3d(
                 ).astype(float)
             ).item()
         )
+        stage_mma_records = [
+            record
+            for record in mma_iteration_records
+            if record.get("continuation_stage") == stage_index
+        ]
+        stage_failure_constraints = [
+            record["failure_constraint"]
+            for record in stage_mma_records
+            if "failure_constraint" in record
+        ]
+        failure_tail = stage_failure_constraints[-10:]
+        failure_tail_peak_to_peak = (
+            float(max(failure_tail) - min(failure_tail))
+            if failure_tail
+            else None
+        )
+        maximum_failure_constraint_jump = (
+            float(np.max(np.abs(np.diff(stage_failure_constraints))))
+            if len(stage_failure_constraints) > 1
+            else 0.0 if stage_failure_constraints else None
+        )
         stage_summaries.append(
             {
                 "beta": float(beta),
+                "continuation_stage": int(stage_index),
+                "failure_limit": (
+                    float(stage_failure_limit) if failure_constrained else None
+                ),
+                "failure_aggregate_exponent": (
+                    float(stage_failure_exponent)
+                    if failure_constrained
+                    else None
+                ),
+                "stage_start_design_checksum": design_checksum(
+                    stage_start_design
+                ),
+                "stage_end_design_checksum": design_checksum(to_numpy(x)),
                 "iterations": int(stage_loop),
                 "converged": bool(stage_converged),
                 "physical_density_fraction": stage_volume_fraction,
                 "volume_fraction_error": stage_volume_fraction - float(volfrac),
                 "gray_fraction_005_095": stage_gray_fraction,
                 "final_change": float(change),
+                "initial_constraint_violation": (
+                    float(stage_mma_records[0]["max_constraint_violation"])
+                    if stage_mma_records
+                    else None
+                ),
+                "failure_constraint_tail_peak_to_peak": (
+                    failure_tail_peak_to_peak
+                ),
+                "maximum_failure_constraint_jump": (
+                    maximum_failure_constraint_jump
+                ),
                 "minimum_achievable_physical_fraction": minimum_volume_fraction,
                 "maximum_achievable_physical_fraction": maximum_volume_fraction,
                 "target_within_achievable_range": target_within_achievable_range,
@@ -1358,6 +1763,36 @@ def top3d(
                             else float(stage_last_subproblem_kkt)
                         ),
                         "subproblem_failed": bool(mma_subproblem_failed),
+                        "subproblem_failure_recovered": bool(
+                            stage_subproblem_failure_recovered
+                        ),
+                        "continuation_feasible": bool(
+                            stage_continuation_feasible
+                        ),
+                        "best_feasible_iteration": (
+                            None
+                            if stage_best_feasible_snapshot is None
+                            else int(
+                                stage_best_feasible_snapshot[1]["iteration"]
+                            )
+                        ),
+                        "least_violation_iteration": (
+                            None
+                            if stage_least_violation_snapshot is None
+                            else int(
+                                stage_least_violation_snapshot[1]["iteration"]
+                            )
+                        ),
+                        "restored_iteration": stage_restored_iteration,
+                        "restoration_linf": float(stage_restoration_linf),
+                        "design_change_from_stage_start": float(
+                            np.max(
+                                np.abs(
+                                    to_numpy(x)[free_mask]
+                                    - stage_start_design[free_mask]
+                                )
+                            )
+                        ),
                     }
                     if optimizer == "mma"
                     else {}
@@ -1427,9 +1862,20 @@ def top3d(
     projection_metrics = {
         "optimization_mode": optimization_mode,
         "optimizer": optimizer,
+        "initial_design_supplied": initial_design_array is not None,
         "projection_enabled": True,
         "projection_beta": float(final_beta),
         "projection_beta_schedule": [float(beta) for beta in beta_schedule],
+        "failure_limit_schedule": (
+            [float(value) for value in stage_failure_limits]
+            if failure_constrained
+            else None
+        ),
+        "failure_aggregate_exponent_schedule": (
+            [float(value) for value in stage_failure_exponents]
+            if failure_constrained
+            else None
+        ),
         "projection_eta": float(projection_eta),
         "penal": float(penal),
         "design_variable_fraction": float(np.mean(final_x[free_mask])),
@@ -1456,11 +1902,29 @@ def top3d(
         "projection_target_within_achievable_range": all(
             stage["target_within_achievable_range"] for stage in stage_summaries
         ),
+        "continuation_stages_requested": len(beta_schedule),
+        "continuation_stages_completed": len(stage_summaries),
+        "continuation_completed": (
+            len(stage_summaries) == len(beta_schedule)
+            and (
+                optimizer != "mma"
+                or all(
+                    stage.get("continuation_feasible", False)
+                    for stage in stage_summaries
+                )
+            )
+        ),
     }
     if optimizer == "mma":
-        feasible_records = [
+        final_stage_index = len(stage_summaries) - 1
+        final_stage_records = [
             record
             for record in mma_iteration_records
+            if record.get("continuation_stage") == final_stage_index
+        ]
+        feasible_records = [
+            record
+            for record in final_stage_records
             if record["max_constraint_violation"] <= 1.0e-3
         ]
         best_feasible_record = (
@@ -1470,10 +1934,10 @@ def top3d(
         )
         least_violation_record = (
             min(
-                mma_iteration_records,
+                final_stage_records,
                 key=lambda record: record["max_constraint_violation"],
             )
-            if mma_iteration_records
+            if final_stage_records
             else None
         )
         final_violation = (
@@ -1548,9 +2012,9 @@ def top3d(
             if final_failure_record is not None:
                 projection_metrics.update(
                     {
-                        "failure_limit": float(failure_limit),
+                        "failure_limit": float(last_executed_failure_limit),
                         "failure_aggregate_exponent": float(
-                            failure_aggregate_exponent
+                            last_executed_failure_exponent
                         ),
                         "failure_relaxation_exponent": float(
                             failure_relaxation_exponent

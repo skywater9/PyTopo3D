@@ -301,6 +301,14 @@ def main(args: Optional[List[str]] = None) -> int:
                 mma_min_density=getattr(
                     parsed_args, "mma_min_density", 1.0e-3
                 ),
+                failure_limit_schedule=getattr(
+                    parsed_args, "failure_limit_schedule", None
+                ),
+                failure_aggregate_exponent_schedule=getattr(
+                    parsed_args,
+                    "failure_aggregate_exponent_schedule",
+                    None,
+                ),
             )
 
         if material_strength is not None:

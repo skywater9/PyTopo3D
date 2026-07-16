@@ -264,6 +264,12 @@ def main():
                 ),
                 mma_move=getattr(args, "mma_move_limit", 0.05),
                 mma_min_density=getattr(args, "mma_min_density", 1.0e-3),
+                failure_limit_schedule=getattr(
+                    args, "failure_limit_schedule", None
+                ),
+                failure_aggregate_exponent_schedule=getattr(
+                    args, "failure_aggregate_exponent_schedule", None
+                ),
             )
 
         failure_postprocessing = None

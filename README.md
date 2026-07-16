@@ -127,6 +127,18 @@ always re-evaluated and an infeasible run is reported explicitly rather than
 accepted. For the default `q=0.5`, `--mma-min-density` supplies the required
 positive free-variable lower bound.
 
+Failure continuation can be coupled to the projection stages. A single value
+is broadcast, or `--failure-limit-schedule 1.5 1.25 1.1 1.0` can tighten the
+constraint while `--failure-aggregate-exponent-schedule 4 6 8 8` sharpens the
+smooth maximum. Limits must be nonincreasing and exponents nondecreasing. Each
+stage warm-starts from the preceding design and freezes a newly calibrated
+aggregate correction for that stage. If a dual subproblem is inaccurate, MMA
+retries with contracted move limits. Before advancing, the optimizer restores
+the lowest-compliance feasible iterate; if no feasible iterate was found, it
+stops with `continuation_stage_infeasible` instead of propagating an invalid
+design into a sharper projection stage. Stage diagnostics record transition
+violation, tail oscillation, rollback, retry, and warm-start checksums.
+
 ## Installation
 
 You can install PyTopo3D in two ways:
@@ -189,6 +201,8 @@ The main optimization parameters are:
 - `failure_limit`: Smooth failure aggregate limit (default: 1.0)
 - `failure_aggregate_exponent`: Corrected p-norm exponent (default: 8.0)
 - `failure_relaxation_exponent`: Gray-stress relaxation exponent q (default: 0.5)
+- `failure_limit_schedule`: Optional nonincreasing failure-limit continuation
+- `failure_aggregate_exponent_schedule`: Optional nondecreasing p continuation
 - `disp_thres`: Display threshold for 3D visualization (elements with density > disp_thres are shown) (default: 0.5)
 - `tolx`: Convergence tolerance on design change (default: 0.01)
 - `maxloop`: Maximum nonlinear evaluations per projection stage (default: 2000); MMA uses the final budgeted evaluation for current constraint reporting
@@ -237,7 +251,9 @@ measured strength data and use MMA:
 ```bash
 python main.py --material-preset my_measured_material \
   --optimization-mode compliance_failure_constrained --optimizer mma \
-  --failure-limit 1.0 --failure-aggregate-exponent 8 \
+  --beta-schedule 1 2 4 8 \
+  --failure-limit-schedule 1.5 1.25 1.1 1.0 \
+  --failure-aggregate-exponent-schedule 4 6 8 8 \
   --failure-relaxation-exponent 0.5 --mma-move-limit 0.05
 ```
 

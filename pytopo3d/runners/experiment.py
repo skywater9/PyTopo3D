@@ -125,6 +125,9 @@ def execute_optimization(
     failure_relaxation_exponent: float = 0.5,
     mma_move: float = 0.05,
     mma_min_density: float = 1.0e-3,
+    failure_limit_schedule: Optional[Sequence[float]] = None,
+    failure_aggregate_exponent_schedule: Optional[Sequence[float]] = None,
+    initial_design: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, Optional[Dict], float, float, float]:
 
     """
@@ -211,6 +214,11 @@ def execute_optimization(
         failure_relaxation_exponent=failure_relaxation_exponent,
         mma_move=mma_move,
         mma_min_density=mma_min_density,
+        failure_limit_schedule=failure_limit_schedule,
+        failure_aggregate_exponent_schedule=(
+            failure_aggregate_exponent_schedule
+        ),
+        initial_design=initial_design,
     )
 
     # Check if we got history back

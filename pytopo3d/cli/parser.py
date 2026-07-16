@@ -110,6 +110,26 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Numerical gray-stress relaxation exponent q",
     )
     basic_group.add_argument(
+        "--failure-limit-schedule",
+        type=float,
+        nargs="+",
+        default=None,
+        help=(
+            "Optional nonincreasing failure limits, one value or one per beta "
+            "stage (for example 1.5 1.25 1.1 1.0)"
+        ),
+    )
+    basic_group.add_argument(
+        "--failure-aggregate-exponent-schedule",
+        type=float,
+        nargs="+",
+        default=None,
+        help=(
+            "Optional nondecreasing corrected p-norm exponents, one value or "
+            "one per beta stage"
+        ),
+    )
+    basic_group.add_argument(
         "--disp_thres",
         type=float,
         default=0.5,

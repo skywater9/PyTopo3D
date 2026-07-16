@@ -93,7 +93,7 @@ def test_higher_feasible_load_activates_failure_and_changes_geometry():
     high_density, _, _, failure_load, high = _run_mixed_failure_problem(5.0)
 
     assert low["failure_aggregate"] < 0.3
-    assert high["failure_aggregate"] == pytest.approx(1.0, abs=0.05)
+    assert 0.9 <= high["failure_aggregate"] <= 1.001
     assert high["failure_constraint"] <= 1.0e-3
     assert high["optimization_feasible"] is True
     assert high["physical_density_fraction"] == pytest.approx(0.5, abs=2.0e-3)
@@ -157,6 +157,7 @@ def test_grossly_infeasible_failure_problem_is_not_reported_as_success():
     assert diagnostics["termination_status"] in {
         "stalled_infeasible_or_not_found",
         "subproblem_failed",
+        "continuation_stage_infeasible",
     }
     assert diagnostics["least_violation_iteration"] is not None
 
@@ -247,3 +248,111 @@ def test_single_evaluation_mma_diagnostics_are_strict_json():
 
     assert diagnostics["projection_stage_summaries"][0]["final_change"] == 0.0
     json.dumps(diagnostics, allow_nan=False)
+
+
+def test_mma_retries_a_numerical_exception_with_a_smaller_move(monkeypatch):
+    real_mma_update = optimizer_module.mma_update
+    calls = {"count": 0}
+
+    def fail_once(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("synthetic dual failure")
+        return real_mma_update(*args, **kwargs)
+
+    monkeypatch.setattr(optimizer_module, "mma_update", fail_once)
+    diagnostics = {}
+    top3d(
+        nelx=4,
+        nely=2,
+        nelz=1,
+        volfrac=0.5,
+        penal=3.0,
+        rmin=1.5,
+        disp_thres=0.5,
+        maxloop=2,
+        beta_schedule=(2.0,),
+        optimizer="mma",
+        mma_move=0.05,
+        diagnostics_out=diagnostics,
+    )
+
+    attempts = diagnostics["mma_iteration_history"][0][
+        "mma_subproblem_attempts"
+    ]
+    assert attempts[0]["error_type"] == "RuntimeError"
+    assert attempts[0]["move_limit"] == pytest.approx(0.05)
+    assert attempts[1]["success"] is True
+    assert attempts[1]["move_limit"] == pytest.approx(0.025)
+
+
+def test_all_mma_retry_exceptions_are_reported_without_escaping(monkeypatch):
+    def always_fail(*args, **kwargs):
+        raise RuntimeError("synthetic persistent dual failure")
+
+    monkeypatch.setattr(optimizer_module, "mma_update", always_fail)
+    diagnostics = {}
+    top3d(
+        nelx=4,
+        nely=2,
+        nelz=1,
+        volfrac=0.5,
+        penal=3.0,
+        rmin=1.5,
+        disp_thres=0.5,
+        maxloop=2,
+        beta_schedule=(2.0,),
+        optimizer="mma",
+        mma_move=0.05,
+        diagnostics_out=diagnostics,
+    )
+
+    record = diagnostics["mma_iteration_history"][0]
+    assert diagnostics["termination_status"] == "subproblem_failed"
+    assert len(record["mma_subproblem_attempts"]) == 3
+    assert record["mma_effective_move_limit"] == pytest.approx(0.0125)
+    assert record["mma_subproblem_kkt_residual"] is None
+    json.dumps(diagnostics, allow_nan=False)
+
+
+def test_feasible_snapshot_recovers_a_failed_stage_and_continues(monkeypatch):
+    real_mma_update = optimizer_module.mma_update
+    calls = {"count": 0}
+
+    def fail_one_complete_retry_set(*args, **kwargs):
+        calls["count"] += 1
+        result = real_mma_update(*args, **kwargs)
+        if 5 <= calls["count"] <= 7:
+            return replace(
+                result,
+                diagnostics=replace(result.diagnostics, dual_success=False),
+            )
+        return result
+
+    monkeypatch.setattr(
+        optimizer_module,
+        "mma_update",
+        fail_one_complete_retry_set,
+    )
+    diagnostics = {}
+    top3d(
+        nelx=4,
+        nely=2,
+        nelz=1,
+        volfrac=0.5,
+        penal=3.0,
+        rmin=1.5,
+        disp_thres=0.5,
+        maxloop=10,
+        beta_schedule=(1.0, 2.0),
+        optimizer="mma",
+        mma_move=0.05,
+        diagnostics_out=diagnostics,
+    )
+
+    stages = diagnostics["projection_stage_summaries"]
+    assert len(stages) == 2
+    assert stages[0]["subproblem_failed"] is True
+    assert stages[0]["subproblem_failure_recovered"] is True
+    assert stages[0]["best_feasible_iteration"] is not None
+    assert diagnostics["continuation_stages_completed"] == 2
