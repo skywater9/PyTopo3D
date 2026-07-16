@@ -48,6 +48,37 @@ This code performs 3D structural topology optimization using the SIMP (Solid Iso
 - Flexible obstacle configuration via JSON files
 - Advanced visualization capabilities including animation generation
 
+## Mechanics and material-coordinate conventions
+
+PyTopo3D uses SI units: lengths are meters, forces are newtons, and stiffness
+and strength values are pascals. Element grids have array shape
+`(nely, nelx, nelz)` and are flattened in Fortran order (`y`, then `x`, then
+`z`). Every H8 node stores displacement degrees of freedom as `[ux, uy, uz]`.
+
+The solver uses these Voigt orders:
+
+- Stress: `[sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx]`
+- Strain: `[epsilon_xx, epsilon_yy, epsilon_zz, gamma_xy, gamma_yz, gamma_zx]`
+
+The shear strains are engineering shear strains; the shear stresses are tensor
+components. A material orientation matrix `R` maps material coordinates to
+global coordinates (`v_global = R @ v_material`). Consequently, stress is
+rotated back for strength evaluation with
+`sigma_material = R.T @ sigma_global @ R`.
+
+The CLI permutation `--material-orientation-xyz zxy`, for example, means
+material X maps to global Z, material Y to global X, and material Z to global
+Y. For FDM presets, material X is the in-layer raster/filament direction,
+material Y is the in-layer transverse direction, and material Z is the build
+direction normal to the layers. Permutation strings label orthotropic axes and
+may represent a reflection; this can change signed shear components but not the
+absolute-shear maximum-stress criterion.
+
+Failure evaluation is available only for presets with a complete, validated
+`strength` section. All nine allowables must be finite and strictly positive in
+Pa. The bundled `orthotropic_validation` preset is synthetic and exists only
+for verification; use measured process-specific strengths for engineering work.
+
 ## Installation
 
 You can install PyTopo3D in two ways:
