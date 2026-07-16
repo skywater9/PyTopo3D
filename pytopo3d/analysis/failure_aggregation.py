@@ -183,6 +183,37 @@ def corrected_pnorm_aggregate(
     )
 
 
+def corrected_pnorm_gradient(result: FailureAggregateResult) -> np.ndarray:
+    """Differentiate a corrected normalized p-mean with frozen calibration.
+
+    ``result`` captures the fixed eligible weights and correction factor used
+    for the value. The zero-field policy is the zero subgradient. Callers must
+    not recalibrate the correction factor during a gradient or finite-
+    difference evaluation.
+    """
+    if not isinstance(result, FailureAggregateResult):
+        raise TypeError("result must be a FailureAggregateResult")
+    gradient = np.zeros_like(result.element_failure_index, dtype=float)
+    if result.normalized_pmean == 0.0:
+        return gradient
+
+    positive = (result.eligible_weights > 0.0) & (
+        result.element_failure_index > 0.0
+    )
+    log_gradient = (
+        np.log(result.correction_factor)
+        + np.log(result.eligible_weights[positive])
+        - np.log(result.weight_sum)
+        + (result.exponent - 1.0)
+        * (
+            np.log(result.element_failure_index[positive])
+            - np.log(result.normalized_pmean)
+        )
+    )
+    gradient[positive] = np.exp(log_gradient)
+    return gradient
+
+
 def aggregate_gauss_failure(
     failure_index_gauss: np.ndarray,
     *,
@@ -210,4 +241,3 @@ def aggregate_gauss_failure(
         weights=element_weights,
         eligible=eligible_elements,
     )
-

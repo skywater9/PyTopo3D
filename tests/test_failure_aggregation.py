@@ -5,6 +5,7 @@ from pytopo3d.analysis.failure_aggregation import (
     aggregate_gauss_failure,
     calibrate_pnorm_correction,
     corrected_pnorm_aggregate,
+    corrected_pnorm_gradient,
     pnorm_aggregate,
 )
 
@@ -156,3 +157,54 @@ def test_large_exponent_is_numerically_stable():
     assert np.isfinite(result.aggregate)
     assert result.aggregate <= result.exact_max
 
+
+def test_corrected_normalized_pmean_gradient_matches_finite_difference():
+    values = np.array([0.13, 0.41, 0.72, 0.9])
+    weights = np.array([0.0, 2.0, 0.5, 1.5])
+    correction = 1.17
+    result = corrected_pnorm_aggregate(
+        values,
+        exponent=8.0,
+        correction_factor=correction,
+        weights=weights,
+    )
+    analytical = corrected_pnorm_gradient(result)
+    finite_difference = np.zeros_like(values)
+    step = 1.0e-6
+    for index in range(values.size):
+        plus = values.copy()
+        minus = values.copy()
+        plus[index] += step
+        minus[index] -= step
+        plus_value = corrected_pnorm_aggregate(
+            plus,
+            exponent=8.0,
+            correction_factor=correction,
+            weights=weights,
+        ).aggregate
+        minus_value = corrected_pnorm_aggregate(
+            minus,
+            exponent=8.0,
+            correction_factor=correction,
+            weights=weights,
+        ).aggregate
+        finite_difference[index] = (plus_value - minus_value) / (2.0 * step)
+
+    np.testing.assert_allclose(analytical, finite_difference, rtol=2e-9, atol=1e-11)
+
+
+def test_zero_aggregate_uses_zero_subgradient():
+    result = corrected_pnorm_aggregate(np.zeros(4), exponent=8.0)
+    np.testing.assert_array_equal(corrected_pnorm_gradient(result), np.zeros(4))
+
+
+def test_pmean_gradient_is_stable_for_tiny_positive_weight():
+    result = corrected_pnorm_aggregate(
+        np.array([1.0, 1.0e-5]),
+        exponent=128.0,
+        weights=np.array([1.0e-320, 1.0]),
+    )
+    gradient = corrected_pnorm_gradient(result)
+
+    assert np.all(np.isfinite(gradient))
+    assert np.all(gradient >= 0.0)

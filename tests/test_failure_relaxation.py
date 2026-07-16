@@ -104,6 +104,19 @@ def test_density_grid_uses_fortran_element_order():
     np.testing.assert_allclose(relaxed[:, 0, 0], 60.0 * expected_scale)
 
 
+def test_zero_density_and_q_zero_have_explicit_conventions():
+    solid_stress = _stress_field(1)
+
+    np.testing.assert_array_equal(
+        relax_gauss_stress(solid_stress, np.zeros(1), exponent=0.5),
+        np.zeros_like(solid_stress),
+    )
+    np.testing.assert_array_equal(
+        relax_gauss_stress(solid_stress, np.zeros(1), exponent=0.0),
+        solid_stress,
+    )
+
+
 @pytest.mark.parametrize(
     ("stress", "density", "exponent", "message"),
     [
@@ -112,6 +125,9 @@ def test_density_grid_uses_fortran_element_order():
         (_stress_field(1), np.array([-0.1]), 0.5, "[0, 1]"),
         (_stress_field(1), np.array([1.1]), 0.5, "[0, 1]"),
         (_stress_field(1), np.ones(1), -0.1, "nonnegative"),
+        (_stress_field(1) * np.nan, np.ones(1), 0.5, "finite"),
+        (_stress_field(1), np.array([np.inf]), 0.5, "finite"),
+        (_stress_field(1), np.ones(1), np.nan, "finite"),
     ],
 )
 def test_relaxation_rejects_invalid_inputs(stress, density, exponent, message):

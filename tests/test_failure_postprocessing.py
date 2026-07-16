@@ -93,6 +93,10 @@ def test_projected_and_binary_failure_use_independent_solves_and_exact_fields(tm
         result.metrics["failure_stress_model_binary"]
         == "full_density_unrelaxed"
     )
+    assert (
+        result.metrics["failure_stress_model_projected"]
+        == "full_density_unrelaxed"
+    )
     assert result.projected_response["compliance"] != result.binary_response[
         "compliance"
     ]

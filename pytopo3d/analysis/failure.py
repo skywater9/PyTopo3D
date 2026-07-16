@@ -148,6 +148,57 @@ def evaluate_maximum_stress(
     )
 
 
+def maximum_stress_gradient(
+    stress_material: np.ndarray,
+    strength: MaterialStrength | Mapping[str, object],
+) -> np.ndarray:
+    """Return a deterministic active-mode derivative ``dFI / d(stress)``.
+
+    The maximum-stress criterion is piecewise linear. This is its exact local
+    derivative away from component, sign, and magnitude ties. At a tie it
+    follows the same first-maximum convention as :func:`evaluate_maximum_stress`
+    and therefore represents one deterministic subgradient.
+    """
+    stress_material = np.asarray(stress_material, dtype=float)
+    result = evaluate_maximum_stress(stress_material, strength)
+    strength = _coerce_strength(strength)
+    gradient = np.zeros_like(stress_material, dtype=float)
+    mode = result.critical_mode_index
+
+    normal_allowables = (
+        strength.X_t,
+        strength.X_c,
+        strength.Y_t,
+        strength.Y_c,
+        strength.Z_t,
+        strength.Z_c,
+    )
+    for mode_index, allowable in enumerate(normal_allowables):
+        component = mode_index // 2
+        sign = 1.0 if mode_index % 2 == 0 else -1.0
+        gradient[..., component] = np.where(
+            mode == mode_index,
+            sign / allowable,
+            gradient[..., component],
+        )
+
+    for mode_index, (component, allowable) in enumerate(
+        (
+            (3, strength.S_xy),
+            (4, strength.S_yz),
+            (5, strength.S_zx),
+        ),
+        start=6,
+    ):
+        shear_sign = np.where(stress_material[..., component] >= 0.0, 1.0, -1.0)
+        gradient[..., component] = np.where(
+            mode == mode_index,
+            shear_sign / allowable,
+            gradient[..., component],
+        )
+    return gradient
+
+
 def evaluate_gauss_maximum_stress(
     stress_material_gauss: np.ndarray,
     strength: MaterialStrength | Mapping[str, object],

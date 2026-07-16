@@ -7,6 +7,7 @@ from pytopo3d.analysis.failure import (
     evaluate_gauss_maximum_stress,
     evaluate_maximum_stress,
     maximum_stress_components,
+    maximum_stress_gradient,
     predicted_failure_load,
 )
 from pytopo3d.utils.config_loader import MaterialStrength
@@ -145,6 +146,34 @@ def test_maximum_stress_accepts_and_validates_strength_mapping():
 
 
 @pytest.mark.parametrize(
+    "stress",
+    [
+        np.array([5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        np.array([-10.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        np.array([0.0, 15.0, 0.0, 0.0, 0.0, 0.0]),
+        np.array([0.0, -20.0, 0.0, 0.0, 0.0, 0.0]),
+        np.array([0.0, 0.0, 25.0, 0.0, 0.0, 0.0]),
+        np.array([0.0, 0.0, -30.0, 0.0, 0.0, 0.0]),
+        np.array([0.0, 0.0, 0.0, 35.0, 0.0, 0.0]),
+        np.array([0.0, 0.0, 0.0, 0.0, -40.0, 0.0]),
+        np.array([0.0, 0.0, 0.0, 0.0, 0.0, 45.0]),
+    ],
+)
+def test_active_maximum_stress_gradient_matches_finite_difference(stress):
+    analytical = maximum_stress_gradient(stress, STRENGTH)
+    finite_difference = np.zeros(6)
+    step = 1.0e-6
+    for component in range(6):
+        direction = np.zeros(6)
+        direction[component] = step
+        plus = evaluate_maximum_stress(stress + direction, STRENGTH).failure_index
+        minus = evaluate_maximum_stress(stress - direction, STRENGTH).failure_index
+        finite_difference[component] = (plus - minus) / (2.0 * step)
+
+    np.testing.assert_allclose(analytical, finite_difference, rtol=1e-8, atol=1e-10)
+
+
+@pytest.mark.parametrize(
     ("function", "value", "message"),
     [
         (maximum_stress_components, np.zeros(5), "dimension 6"),
@@ -163,4 +192,3 @@ def test_failure_evaluation_rejects_invalid_stress_shape(function, value, messag
 def test_predicted_failure_load_rejects_invalid_inputs(reference_load, failure_index):
     with pytest.raises(ValueError):
         predicted_failure_load(reference_load, failure_index)
-

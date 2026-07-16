@@ -105,6 +105,17 @@ Projected and binary post-processing remain separate from this optimization
 measure, and binary failure always uses unrelaxed stress in full-density solid
 elements only.
 
+The failure gradient includes both the explicit derivative
+`q*rho^(q-1)` and the implicit displacement response. A single reduced-system
+adjoint solve computes the latter, after which the existing projection
+derivative and density-filter transpose map the result back to design
+variables. The corrected p-norm calibration and eligibility mask are fixed
+during a sensitivity/optimization stage. Component and Gauss-point maxima use
+a deterministic active-set derivative, so gradient checks must avoid ties.
+For `0 < q < 1`, eligible physical densities must be strictly positive;
+protected voids remain exactly zero and are excluded. `q=0` explicitly means
+no stress relaxation and has zero explicit density derivative.
+
 ## Installation
 
 You can install PyTopo3D in two ways:
