@@ -9,6 +9,97 @@ import numpy as np
 
 from pytopo3d.utils.assembly import H8_NODE_OFFSETS
 
+
+H8_GAUSS_POINTS = np.array(
+    [
+        [-1 / np.sqrt(3), -1 / np.sqrt(3), -1 / np.sqrt(3)],
+        [1 / np.sqrt(3), -1 / np.sqrt(3), -1 / np.sqrt(3)],
+        [-1 / np.sqrt(3), 1 / np.sqrt(3), -1 / np.sqrt(3)],
+        [1 / np.sqrt(3), 1 / np.sqrt(3), -1 / np.sqrt(3)],
+        [-1 / np.sqrt(3), -1 / np.sqrt(3), 1 / np.sqrt(3)],
+        [1 / np.sqrt(3), -1 / np.sqrt(3), 1 / np.sqrt(3)],
+        [-1 / np.sqrt(3), 1 / np.sqrt(3), 1 / np.sqrt(3)],
+        [1 / np.sqrt(3), 1 / np.sqrt(3), 1 / np.sqrt(3)],
+    ],
+    dtype=float,
+)
+
+
+def h8_shape_function_gradients(xi: float, eta: float, zeta: float) -> np.ndarray:
+    """Return H8 shape-function gradients in natural coordinates."""
+    node_signs = 2.0 * np.asarray(H8_NODE_OFFSETS, dtype=float) - 1.0
+    gradients = np.zeros((8, 3), dtype=float)
+    for index, (xi_sign, eta_sign, zeta_sign) in enumerate(node_signs):
+        gradients[index, 0] = (
+            0.125
+            * xi_sign
+            * (1.0 + eta_sign * eta)
+            * (1.0 + zeta_sign * zeta)
+        )
+        gradients[index, 1] = (
+            0.125
+            * eta_sign
+            * (1.0 + xi_sign * xi)
+            * (1.0 + zeta_sign * zeta)
+        )
+        gradients[index, 2] = (
+            0.125
+            * zeta_sign
+            * (1.0 + xi_sign * xi)
+            * (1.0 + eta_sign * eta)
+        )
+    return gradients
+
+
+def h8_strain_displacement_matrix(shape_gradients: np.ndarray) -> np.ndarray:
+    """Build the engineering-strain B matrix from physical H8 gradients."""
+    shape_gradients = np.asarray(shape_gradients, dtype=float)
+    if shape_gradients.shape != (8, 3):
+        raise ValueError(
+            f"shape_gradients must have shape (8, 3), got {shape_gradients.shape}"
+        )
+
+    matrix = np.zeros((6, 24), dtype=float)
+    for index, (dN_dx, dN_dy, dN_dz) in enumerate(shape_gradients):
+        column = 3 * index
+        matrix[:, column : column + 3] = np.array(
+            [
+                [dN_dx, 0.0, 0.0],
+                [0.0, dN_dy, 0.0],
+                [0.0, 0.0, dN_dz],
+                [dN_dy, dN_dx, 0.0],
+                [0.0, dN_dz, dN_dy],
+                [dN_dz, 0.0, dN_dx],
+            ]
+        )
+    return matrix
+
+
+def h8_gauss_integration_data(elem_size: float = 1.0):
+    """Return B matrices, Jacobian determinants, and weights at 8 Gauss points."""
+    if not np.isfinite(elem_size) or elem_size <= 0.0:
+        raise ValueError(f"elem_size must be finite and positive, got {elem_size}")
+
+    node_signs = 2.0 * np.asarray(H8_NODE_OFFSETS, dtype=float) - 1.0
+    coordinates = node_signs * (0.5 * elem_size)
+    matrices = np.empty((8, 6, 24), dtype=float)
+    determinants = np.empty(8, dtype=float)
+    weights = np.ones(8, dtype=float)
+
+    for index, (xi, eta, zeta) in enumerate(H8_GAUSS_POINTS):
+        natural_gradients = h8_shape_function_gradients(xi, eta, zeta)
+        jacobian = natural_gradients.T @ coordinates
+        determinant = np.linalg.det(jacobian)
+        if determinant <= 0.0:
+            raise ValueError("Negative or zero Jacobian determinant.")
+        physical_gradients = np.linalg.solve(
+            jacobian.T, natural_gradients.T
+        ).T
+        matrices[index] = h8_strain_displacement_matrix(physical_gradients)
+        determinants[index] = determinant
+
+    return matrices, determinants, weights
+
 def lk_H8(
     E_x: float = 1,
     E_y: float = None,
@@ -55,77 +146,10 @@ def lk_H8(
     )
     assert C.shape == (6, 6), "Elasticity tensor must be 6x6 in Voigt notation."
 
-    # Gauss points and weights for 2-point Gauss quadrature
-    gpts = np.array([[-1/np.sqrt(3), -1/np.sqrt(3), -1/np.sqrt(3)],
-                     [ 1/np.sqrt(3), -1/np.sqrt(3), -1/np.sqrt(3)],
-                     [-1/np.sqrt(3),  1/np.sqrt(3), -1/np.sqrt(3)],
-                     [ 1/np.sqrt(3),  1/np.sqrt(3), -1/np.sqrt(3)],
-                     [-1/np.sqrt(3), -1/np.sqrt(3),  1/np.sqrt(3)],
-                     [ 1/np.sqrt(3), -1/np.sqrt(3),  1/np.sqrt(3)],
-                     [-1/np.sqrt(3),  1/np.sqrt(3),  1/np.sqrt(3)],
-                     [ 1/np.sqrt(3),  1/np.sqrt(3),  1/np.sqrt(3)]])
-    weights = np.ones(8)
-
-    # Natural-coordinate signs in the same local-corner order used by
-    # build_edof.  Keep these +/-1 signs separate from physical coordinates;
-    # the H8 shape functions are defined on [-1, 1]^3.
-    node_signs = 2.0 * np.asarray(H8_NODE_OFFSETS, dtype=float) - 1.0
-
-    # Shape function derivatives with respect to ξ, η, ζ
-    def shape_fn_grad(ξ, η, ζ):
-        dN = np.zeros((8, 3))
-        for i, (xi_sign, eta_sign, zeta_sign) in enumerate(node_signs):
-            dN[i, 0] = (
-                0.125
-                * xi_sign
-                * (1.0 + eta_sign * η)
-                * (1.0 + zeta_sign * ζ)
-            )
-            dN[i, 1] = (
-                0.125
-                * eta_sign
-                * (1.0 + xi_sign * ξ)
-                * (1.0 + zeta_sign * ζ)
-            )
-            dN[i, 2] = (
-                0.125
-                * zeta_sign
-                * (1.0 + xi_sign * ξ)
-                * (1.0 + eta_sign * η)
-            )
-        return dN
-
-    # B-matrix constructor
-    def make_B(dNdx):
-        B = np.zeros((6, 24))
-        for i in range(8):
-            i3 = i * 3
-            dNxi, dNyi, dNzi = dNdx[i]
-            B[:, i3:i3+3] = np.array([
-                [dNxi,     0,     0],
-                [    0, dNyi,     0],
-                [    0,     0, dNzi],
-                [dNyi, dNxi,     0],
-                [    0, dNzi, dNyi],
-                [dNzi,     0, dNxi]
-            ])
-        return B
-
-    # Physical coordinates of a cube centered at the origin.
-    coords = node_signs * (0.5 * elem_size)
-
+    matrices, determinants, weights = h8_gauss_integration_data(elem_size)
     KE = np.zeros((24, 24))
-    for w, (ξ, η, ζ) in zip(weights, gpts):
-        # Compute shape function gradients in physical coordinates
-        dN_dxi = shape_fn_grad(ξ, η, ζ)    # 8x3
-        J = dN_dxi.T @ coords              # 3x3 Jacobian
-        detJ = np.linalg.det(J)
-        if detJ <= 0:
-            raise ValueError("Negative or zero Jacobian determinant.")
-
-        dN_dx = np.linalg.solve(J.T, dN_dxi.T).T  # 8x3 shape fn grads in x,y,z
-        B = make_B(dN_dx)
-        KE += B.T @ C @ B * detJ * w
+    for matrix, determinant, weight in zip(matrices, determinants, weights):
+        KE += matrix.T @ C @ matrix * determinant * weight
 
     return KE
 
