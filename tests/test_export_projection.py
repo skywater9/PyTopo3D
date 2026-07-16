@@ -14,6 +14,13 @@ def test_projection_cli_defaults_and_per_stage_alias():
     assert defaults.beta_schedule == [1.0, 2.0, 4.0, 8.0]
     assert defaults.projection_eta == 0.5
     assert defaults.move_limit == 0.2
+    assert defaults.optimization_mode == "compliance"
+    assert defaults.optimizer == "oc"
+    assert defaults.mma_move_limit == 0.05
+    assert defaults.mma_min_density == 1.0e-3
+    assert defaults.failure_limit == 1.0
+    assert defaults.failure_aggregate_exponent == 8.0
+    assert defaults.failure_relaxation_exponent == 0.5
 
     custom = parse_args(
         [

@@ -249,6 +249,21 @@ def main():
                 projection_eta=getattr(args, "projection_eta", 0.5),
                 move=getattr(args, "move_limit", 0.2),
                 diagnostics_out=optimization_diagnostics,
+                optimization_mode=getattr(args, "optimization_mode", "compliance"),
+                optimizer=getattr(args, "optimizer", "oc"),
+                material_strength=material_strength,
+                material_orientation=material_orientation_matrix(
+                    material_orientation_xyz
+                ),
+                failure_limit=getattr(args, "failure_limit", 1.0),
+                failure_aggregate_exponent=getattr(
+                    args, "failure_aggregate_exponent", 8.0
+                ),
+                failure_relaxation_exponent=getattr(
+                    args, "failure_relaxation_exponent", 0.5
+                ),
+                mma_move=getattr(args, "mma_move_limit", 0.05),
+                mma_min_density=getattr(args, "mma_min_density", 1.0e-3),
             )
 
         failure_postprocessing = None

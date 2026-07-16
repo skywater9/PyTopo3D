@@ -116,6 +116,15 @@ def execute_optimization(
     projection_eta: float = 0.5,
     move: float = 0.2,
     diagnostics_out: Optional[MutableMapping[str, Any]] = None,
+    optimization_mode: str = "compliance",
+    optimizer: str = "oc",
+    material_strength: Optional[Any] = None,
+    material_orientation: Optional[np.ndarray] = None,
+    failure_limit: float = 1.0,
+    failure_aggregate_exponent: float = 8.0,
+    failure_relaxation_exponent: float = 0.5,
+    mma_move: float = 0.05,
+    mma_min_density: float = 1.0e-3,
 ) -> Tuple[np.ndarray, Optional[Dict], float, float, float]:
 
     """
@@ -193,6 +202,15 @@ def execute_optimization(
         projection_eta=projection_eta,
         move=move,
         diagnostics_out=diagnostics_out,
+        optimization_mode=optimization_mode,
+        optimizer=optimizer,
+        material_strength=material_strength,
+        material_orientation=material_orientation,
+        failure_limit=failure_limit,
+        failure_aggregate_exponent=failure_aggregate_exponent,
+        failure_relaxation_exponent=failure_relaxation_exponent,
+        mma_move=mma_move,
+        mma_min_density=mma_min_density,
     )
 
     # Check if we got history back

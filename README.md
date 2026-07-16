@@ -116,6 +116,17 @@ For `0 < q < 1`, eligible physical densities must be strictly positive;
 protected voids remain exactly zero and are excluded. `q=0` explicitly means
 no stress relaxation and has zero explicit density derivative.
 
+The original compliance problem continues to use OC by default. Selecting
+`--optimization-mode compliance_failure_constrained --optimizer mma` instead
+minimizes compliance with both physical free-volume and smooth failure
+constraints. MMA updates only free design variables; protected solids and voids
+remain exact. The objective is normalized by a fixed reference while both
+constraints are dimensionless. Elastic subproblem slacks let MMA recover from
+a temporarily infeasible move box, but the final nonlinear constraints are
+always re-evaluated and an infeasible run is reported explicitly rather than
+accepted. For the default `q=0.5`, `--mma-min-density` supplies the required
+positive free-variable lower bound.
+
 ## Installation
 
 You can install PyTopo3D in two ways:
@@ -171,9 +182,16 @@ The main optimization parameters are:
 - `beta_schedule`: Heaviside continuation stages (default: `1 2 4 8`)
 - `projection_eta`: Heaviside threshold (default: 0.5)
 - `move_limit`: Maximum OC design-variable change per iteration (default: 0.2)
+- `optimization_mode`: `compliance` or `compliance_failure_constrained`
+- `optimizer`: `oc` or `mma` (failure constraints require `mma`)
+- `mma_move_limit`: Maximum MMA free-variable change per iteration (default: 0.05)
+- `mma_min_density`: Positive free-variable lower bound for relaxed failure (default: 0.001)
+- `failure_limit`: Smooth failure aggregate limit (default: 1.0)
+- `failure_aggregate_exponent`: Corrected p-norm exponent (default: 8.0)
+- `failure_relaxation_exponent`: Gray-stress relaxation exponent q (default: 0.5)
 - `disp_thres`: Display threshold for 3D visualization (elements with density > disp_thres are shown) (default: 0.5)
 - `tolx`: Convergence tolerance on design change (default: 0.01)
-- `maxloop`: Maximum number of iterations per projection stage (default: 2000)
+- `maxloop`: Maximum nonlinear evaluations per projection stage (default: 2000); MMA uses the final budgeted evaluation for current constraint reporting
 
 The optimizer uses one consistent material field throughout the workflow:
 
@@ -211,6 +229,16 @@ To run a basic optimization:
 ```bash
 python main.py --nelx 32 --nely 16 --nelz 16 --volfrac 0.3 --penal 3.0 --rmin 3.0 \
                --beta-schedule 1 2 4 8 --projection-eta 0.5
+```
+
+For failure-constrained compliance optimization, choose a material preset with
+measured strength data and use MMA:
+
+```bash
+python main.py --material-preset my_measured_material \
+  --optimization-mode compliance_failure_constrained --optimizer mma \
+  --failure-limit 1.0 --failure-aggregate-exponent 8 \
+  --failure-relaxation-exponent 0.5 --mma-move-limit 0.05
 ```
 
 For full options:

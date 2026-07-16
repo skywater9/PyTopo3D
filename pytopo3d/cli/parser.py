@@ -65,6 +65,51 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Maximum OC design-variable change per iteration",
     )
     basic_group.add_argument(
+        "--optimization-mode",
+        choices=["compliance", "compliance_failure_constrained"],
+        default="compliance",
+        help="Optimization problem formulation",
+    )
+    basic_group.add_argument(
+        "--optimizer",
+        choices=["oc", "mma"],
+        default="oc",
+        help="Design update algorithm (failure constraints require MMA)",
+    )
+    basic_group.add_argument(
+        "--mma-move-limit",
+        type=float,
+        default=0.05,
+        help="Maximum MMA free-variable change per iteration",
+    )
+    basic_group.add_argument(
+        "--mma-min-density",
+        type=float,
+        default=1.0e-3,
+        help=(
+            "Positive lower bound for free failure-constrained MMA variables; "
+            "protected voids remain exactly zero"
+        ),
+    )
+    basic_group.add_argument(
+        "--failure-limit",
+        type=float,
+        default=1.0,
+        help="Upper limit applied to the smooth failure aggregate",
+    )
+    basic_group.add_argument(
+        "--failure-aggregate-exponent",
+        type=float,
+        default=8.0,
+        help="Corrected normalized p-norm exponent for failure aggregation",
+    )
+    basic_group.add_argument(
+        "--failure-relaxation-exponent",
+        type=float,
+        default=0.5,
+        help="Numerical gray-stress relaxation exponent q",
+    )
+    basic_group.add_argument(
         "--disp_thres",
         type=float,
         default=0.5,

@@ -282,6 +282,25 @@ def main(args: Optional[List[str]] = None) -> int:
                 projection_eta=getattr(parsed_args, "projection_eta", 0.5),
                 move=getattr(parsed_args, "move_limit", 0.2),
                 diagnostics_out=optimization_diagnostics,
+                optimization_mode=getattr(
+                    parsed_args, "optimization_mode", "compliance"
+                ),
+                optimizer=getattr(parsed_args, "optimizer", "oc"),
+                material_strength=material_strength,
+                material_orientation=material_orientation_matrix(
+                    material_orientation_xyz
+                ),
+                failure_limit=getattr(parsed_args, "failure_limit", 1.0),
+                failure_aggregate_exponent=getattr(
+                    parsed_args, "failure_aggregate_exponent", 8.0
+                ),
+                failure_relaxation_exponent=getattr(
+                    parsed_args, "failure_relaxation_exponent", 0.5
+                ),
+                mma_move=getattr(parsed_args, "mma_move_limit", 0.05),
+                mma_min_density=getattr(
+                    parsed_args, "mma_min_density", 1.0e-3
+                ),
             )
 
         if material_strength is not None:
