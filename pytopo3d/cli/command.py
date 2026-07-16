@@ -326,6 +326,10 @@ def main(args: Optional[List[str]] = None) -> int:
                 support_mask=support_mask,
                 obstacle_mask=combined_obstacle_mask,
                 protected_zone_mask=protected_zone_mask,
+                smooth_failure_aggregate=optimization_diagnostics.get(
+                    "failure_aggregate"
+                ),
+                smooth_failure_limit=optimization_diagnostics.get("failure_limit"),
                 use_gpu=parsed_args.gpu,
                 results_manager=results_mgr,
             )
@@ -336,9 +340,13 @@ def main(args: Optional[List[str]] = None) -> int:
             ]
             binary_fi = failure_postprocessing.metrics["failure_index_max_binary"]
             logger.info(
-                "Failure post-processing: projected FI=%s, binary FI=%s",
+                "Failure post-processing: projected FI=%s, binary FI=%s, "
+                "internal verification=%s",
                 "n/a" if projected_fi is None else f"{projected_fi:.6e}",
                 "n/a" if binary_fi is None else f"{binary_fi:.6e}",
+                failure_postprocessing.metrics[
+                    "stage10_internal_verification_status"
+                ],
             )
         else:
             final_response_metrics = evaluate_fixed_geometry_metrics(

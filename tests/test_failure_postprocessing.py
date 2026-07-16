@@ -1,6 +1,9 @@
+from dataclasses import replace
+import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from pytopo3d.analysis.postprocessing import (
     build_failure_region_masks,
@@ -100,6 +103,29 @@ def test_projected_and_binary_failure_use_independent_solves_and_exact_fields(tm
     assert result.projected_response["compliance"] != result.binary_response[
         "compliance"
     ]
+    assert result.metrics["compliance_projected"] == result.projected_response[
+        "compliance"
+    ]
+    assert result.metrics["compliance_binary"] == result.binary_response[
+        "compliance"
+    ]
+    assert result.metrics["volume_fraction_projected"] == np.mean(density)
+    assert result.metrics["volume_fraction_binary"] == 1.0
+    assert result.metrics["material_volume_m3_projected"] == pytest.approx(
+        np.sum(density) * 1.0e-6
+    )
+    assert result.metrics["reference_volume_m3_projected"] == pytest.approx(4.0e-6)
+    assert result.metrics["volume_units"] == "m^3"
+    assert result.metrics["predicted_stiffness_projected"] == result.projected_response[
+        "k_avg"
+    ]
+    assert result.metrics["stage10_internal_verification_status"] == "passed"
+    assert result.metrics["ansys_validation_status"] == "not_run"
+    assert (
+        result.metrics["critical_region_artifact_validation_status"]
+        == "external_review_not_run"
+    )
+    json.dumps(result.metrics, allow_nan=False)
 
     for representation in ("projected", "binary"):
         assert result.metrics[f"failure_index_max_{representation}"] >= 0.0
@@ -107,6 +133,10 @@ def test_projected_and_binary_failure_use_independent_solves_and_exact_fields(tm
         assert result.metrics[f"critical_element_{representation}"] is not None
         assert result.metrics[f"critical_gauss_point_{representation}"] in range(8)
         assert result.metrics[f"critical_mode_{representation}"]
+        assert result.metrics[f"critical_region_{representation}"] in {
+            "design",
+            "fixture_or_load",
+        }
         assert (
             result.metrics[
                 f"max_failure_index_all_elements_{representation}"
@@ -166,3 +196,139 @@ def test_binary_failure_only_includes_solid_elements():
     assert result.binary_density[0, 1, 0] == 0.0
     assert result.binary.all_element_count == 3
     assert result.projected.all_element_count == 4
+
+
+def test_binary_threshold_does_not_add_unprotected_fixture_material():
+    density, material_params = _small_projected_bar()
+    density[0, 0, 0] = 0.2
+    density[0, -1, 0] = 0.2
+
+    result = evaluate_failure_representations(
+        x_projected=density,
+        binary_threshold=0.5,
+        penal=3.0,
+        material_params=material_params,
+        strength=get_material_strength("orthotropic_validation"),
+        orientation_matrix=np.eye(3),
+        elem_size=0.01,
+    )
+
+    assert result.binary_density[0, 0, 0] == 0.0
+    assert result.binary_density[0, -1, 0] == 0.0
+    assert result.metrics["volume_fraction_binary"] == 0.5
+
+    protected = np.zeros_like(density, dtype=bool)
+    protected[0, 0, 0] = True
+    protected_result = evaluate_failure_representations(
+        x_projected=density,
+        binary_threshold=0.5,
+        penal=3.0,
+        material_params=material_params,
+        strength=get_material_strength("orthotropic_validation"),
+        orientation_matrix=np.eye(3),
+        elem_size=0.01,
+        protected_zone_mask=protected,
+    )
+    assert protected_result.binary_density[0, 0, 0] == 1.0
+
+
+def test_smooth_feasible_binary_failure_is_flagged_with_remediation():
+    density, material_params = _small_projected_bar()
+    strength = get_material_strength("orthotropic_validation")
+    baseline = evaluate_failure_representations(
+        x_projected=density,
+        binary_threshold=0.5,
+        penal=3.0,
+        material_params=material_params,
+        strength=strength,
+        orientation_matrix=np.eye(3),
+        elem_size=0.01,
+    )
+    baseline_fi = baseline.metrics["failure_index_max_binary"]
+    scale = baseline_fi / 1.2
+    weak_strength = replace(
+        strength,
+        X_t=strength.X_t * scale,
+        X_c=strength.X_c * scale,
+        Y_t=strength.Y_t * scale,
+        Y_c=strength.Y_c * scale,
+        Z_t=strength.Z_t * scale,
+        Z_c=strength.Z_c * scale,
+        S_xy=strength.S_xy * scale,
+        S_yz=strength.S_yz * scale,
+        S_zx=strength.S_zx * scale,
+    )
+
+    result = evaluate_failure_representations(
+        x_projected=density,
+        binary_threshold=0.5,
+        penal=3.0,
+        material_params=material_params,
+        strength=weak_strength,
+        orientation_matrix=np.eye(3),
+        elem_size=0.01,
+        # MMA treats a relative residual <= 1e-3 as feasible.  Exercise that
+        # boundary rather than an obviously sub-limit aggregate.
+        smooth_failure_aggregate=1.0005,
+        smooth_failure_limit=1.0,
+    )
+
+    assert result.metrics["failure_index_max_binary"] == pytest.approx(1.2)
+    assert result.metrics["failure_strength_feasible_binary"] is False
+    assert result.metrics["failure_strength_margin_binary"] == pytest.approx(-0.2)
+    assert result.metrics["smooth_failure_feasible"] is True
+    assert result.metrics["smooth_to_binary_failure_mismatch"] is True
+    assert result.metrics["stage10_internal_verification_passed"] is False
+    assert result.metrics["stage10_internal_verification_status"] == (
+        "failed_binary_strength"
+    )
+    assert len(result.metrics["failure_verification_recommendations"]) == 6
+
+
+def test_volume_fraction_uses_non_obstacle_reference_and_enforces_protection():
+    density, material_params = _small_projected_bar()
+    density[0, 1, 0] = 0.2
+    obstacle = np.zeros_like(density, dtype=bool)
+    obstacle[0, 2, 0] = True
+    protected = np.zeros_like(density, dtype=bool)
+    protected[0, 1, 0] = True
+
+    result = evaluate_failure_representations(
+        x_projected=density,
+        binary_threshold=0.5,
+        penal=3.0,
+        material_params=material_params,
+        strength=get_material_strength("orthotropic_validation"),
+        orientation_matrix=np.eye(3),
+        elem_size=0.01,
+        obstacle_mask=obstacle,
+        protected_zone_mask=protected,
+    )
+
+    assert result.binary_density[0, 1, 0] == 1.0
+    assert result.binary_density[0, 2, 0] == 0.0
+    assert result.metrics["volume_fraction_projected"] == 1.0
+    assert result.metrics["volume_fraction_binary"] == 1.0
+    assert result.metrics["reference_volume_m3_projected"] == pytest.approx(3.0e-6)
+
+
+def test_failure_verification_inputs_are_validated_together():
+    density, material_params = _small_projected_bar()
+    common = {
+        "x_projected": density,
+        "binary_threshold": 0.5,
+        "penal": 3.0,
+        "material_params": material_params,
+        "strength": get_material_strength("orthotropic_validation"),
+        "orientation_matrix": np.eye(3),
+        "elem_size": 0.01,
+    }
+    with pytest.raises(ValueError, match="supplied together"):
+        evaluate_failure_representations(
+            **common,
+            smooth_failure_aggregate=0.9,
+        )
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        evaluate_failure_representations(
+            **{**common, "x_projected": np.full_like(density, 1.1)}
+        )

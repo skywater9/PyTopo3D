@@ -88,6 +88,23 @@ maxima. Detailed global/material stress and failure arrays are saved with
 unrelaxed full-density material stress; only solid elements are eligible in the
 binary result.
 
+Final verification also reports, for both representations, compliance,
+dominant-direction predicted stiffness, `V/V0` over the non-obstacle reference
+domain, physical material volume, strength margin, feasibility status, and the
+critical design-versus-fixture region. The binary field is a literal threshold
+of the projected field: only explicit protected-solid zones are prescribed
+solid, while merely being adjacent to an idealized support or load does not add
+material. If a supplied smooth aggregate is feasible but exact binary
+`FImax > 1`, the run is marked as a smooth-to-binary mismatch and records the
+recommended remedies (constraint margin, sharper aggregation/continuation,
+regional constraints, and feature-size control). Mismatch classification uses
+MMA's relative smooth-constraint feasibility tolerance (`1e-3` by default),
+while the exact binary strength check retains a tight numerical tolerance. The
+internal solve does not claim that a boundary hotspot is artifact-free or that
+ANSYS agrees;
+`critical_region_artifact_validation_status` and `ansys_validation_status`
+remain explicitly pending until independent evidence is supplied.
+
 The optimization-facing smooth failure measure first takes the maximum of the
 eight Gauss-point indices in each eligible element, then applies a normalized
 corrected p-norm (default `p=8`). Its correction factor is calibrated at a

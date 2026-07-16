@@ -947,12 +947,15 @@ def top3d(
             failure_reference_load,
             partials.aggregate_result.exact_max,
         )
+        predicted_load = (
+            float(predicted_load) if np.isfinite(predicted_load) else None
+        )
         return {
             "partials": partials,
             "design_derivative": design_derivative,
             "correction_factor": float(correction_factor),
             "critical": critical,
-            "predicted_failure_load": float(predicted_load),
+            "predicted_failure_load": predicted_load,
             "adjoint_solve_count": int(adjoint_solve_count),
             "adjoint_relative_residual": float(adjoint_relative_residual),
         }
@@ -1292,9 +1295,9 @@ def top3d(
                             "critical_failure_mode": critical.mode,
                             "critical_element": int(critical.element),
                             "critical_gauss_point": int(critical.gauss_point),
-                            "predicted_failure_load": float(
-                                failure_iteration["predicted_failure_load"]
-                            ),
+                            "predicted_failure_load": failure_iteration[
+                                "predicted_failure_load"
+                            ],
                             "failure_correction_factor": float(
                                 failure_correction_factor
                             ),

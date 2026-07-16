@@ -105,6 +105,8 @@ def binary_closeness_run():
         orientation_matrix=ORIENTATION_MATRIX,
         elem_size=0.01,
         force_field=force_field,
+        smooth_failure_aggregate=diagnostics["failure_aggregate"],
+        smooth_failure_limit=diagnostics["failure_limit"],
     )
     return diagnostics, verification
 
@@ -176,6 +178,10 @@ def test_exact_binary_failure_is_close_on_a_connected_load_case(
     assert diagnostics["continuation_completed"] is True
     assert diagnostics["optimization_feasible"] is True
     assert binary_failure <= 1.0
+    assert verification.metrics["failure_strength_feasible_binary"] is True
+    assert verification.metrics["smooth_failure_feasible"] is True
+    assert verification.metrics["smooth_to_binary_failure_mismatch"] is False
+    assert verification.metrics["stage10_internal_verification_passed"] is True
     assert abs(binary_failure - smooth_failure) / smooth_failure < 0.25
     assert verification.binary_response["compliance"] < (
         10.0 * verification.projected_response["compliance"]
