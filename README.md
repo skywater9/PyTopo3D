@@ -95,6 +95,16 @@ reference design and held fixed during each gradient/optimization stage;
 recalibrating it for every design would recreate the nonsmooth exact maximum.
 The exact maximum is always retained as a separate diagnostic.
 
+During failure-constrained optimization, gray-element stress is evaluated as
+`sigma_hat = rho^q * (C0 @ B @ u)`, initially with `q=0.5`. This deliberately
+uses solid-material stress rather than the SIMP-penalized constitutive matrix:
+near-void elements are relaxed, while narrow gray connections are not made as
+artificially safe as they would be under the stiffness exponent. The value of
+`q` is a numerical regularization choice, not a measured material property.
+Projected and binary post-processing remain separate from this optimization
+measure, and binary failure always uses unrelaxed stress in full-density solid
+elements only.
+
 ## Installation
 
 You can install PyTopo3D in two ways:

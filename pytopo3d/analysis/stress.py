@@ -19,6 +19,49 @@ STRESS_VOIGT_ORDER = (
 )
 
 
+def relax_gauss_stress(
+    solid_stress_gauss: np.ndarray,
+    density: np.ndarray,
+    *,
+    exponent: float = 0.5,
+) -> np.ndarray:
+    """Apply optimization-only gray-density stress relaxation.
+
+    ``solid_stress_gauss`` is the full-density stress ``C0 @ B @ u`` and the
+    returned field is ``density**exponent * solid_stress_gauss``. Density
+    grids are flattened in the solver's Fortran element order. The exponent
+    is a numerical regularization parameter, not a material property; final
+    binary verification must continue to use the unrelaxed solid stress.
+    """
+    solid_stress_gauss = np.asarray(solid_stress_gauss, dtype=float)
+    if solid_stress_gauss.ndim != 3 or solid_stress_gauss.shape[1:] != (8, 6):
+        raise ValueError(
+            "solid_stress_gauss must have shape "
+            f"(number_of_elements, 8, 6), got {solid_stress_gauss.shape}"
+        )
+    if not np.all(np.isfinite(solid_stress_gauss)):
+        raise ValueError("solid_stress_gauss must contain only finite values")
+
+    density = np.asarray(density, dtype=float).ravel(order="F")
+    number_of_elements = solid_stress_gauss.shape[0]
+    if density.shape != (number_of_elements,):
+        raise ValueError(
+            f"density must contain {number_of_elements} element values, "
+            f"got {density.size}"
+        )
+    if not np.all(np.isfinite(density)) or np.any(density < 0.0) or np.any(
+        density > 1.0
+    ):
+        raise ValueError("density must contain only finite values in [0, 1]")
+
+    exponent = float(exponent)
+    if not np.isfinite(exponent) or exponent < 0.0:
+        raise ValueError(f"exponent must be finite and nonnegative, got {exponent}")
+
+    relaxation = np.power(density, exponent)
+    return relaxation[:, None, None] * solid_stress_gauss
+
+
 def stress_voigt_to_tensor(stress_voigt: np.ndarray) -> np.ndarray:
     """Convert ``[..., 6]`` stress Voigt vectors to symmetric tensors."""
     stress_voigt = np.asarray(stress_voigt, dtype=float)

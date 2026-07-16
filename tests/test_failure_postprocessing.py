@@ -89,6 +89,10 @@ def test_projected_and_binary_failure_use_independent_solves_and_exact_fields(tm
     assert result.projected.gauss_failure.failure_index_gauss.shape == (4, 8)
     assert result.projected.gauss_failure.failure_index_element.shape == (4,)
     assert result.binary.gauss_failure.failure_index_gauss.shape == (4, 8)
+    assert (
+        result.metrics["failure_stress_model_binary"]
+        == "full_density_unrelaxed"
+    )
     assert result.projected_response["compliance"] != result.binary_response[
         "compliance"
     ]
@@ -158,4 +162,3 @@ def test_binary_failure_only_includes_solid_elements():
     assert result.binary_density[0, 1, 0] == 0.0
     assert result.binary.all_element_count == 3
     assert result.projected.all_element_count == 4
-

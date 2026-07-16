@@ -7,6 +7,7 @@ from typing import Mapping
 
 import numpy as np
 
+from pytopo3d.analysis.stress import relax_gauss_stress
 from pytopo3d.utils.config_loader import (
     MaterialStrength,
     validate_material_strength,
@@ -183,6 +184,27 @@ def evaluate_gauss_maximum_stress(
     )
 
 
+def evaluate_relaxed_gauss_maximum_stress(
+    solid_stress_material_gauss: np.ndarray,
+    density: np.ndarray,
+    strength: MaterialStrength | Mapping[str, object],
+    *,
+    relaxation_exponent: float = 0.5,
+) -> GaussFailureResult:
+    """Evaluate the optimization-only failure index ``FI(rho**q * sigma0)``.
+
+    This helper deliberately accepts full-density material-coordinate stress.
+    It must not be used for final binary verification, which evaluates
+    :func:`evaluate_gauss_maximum_stress` on unrelaxed solid stress instead.
+    """
+    relaxed_stress = relax_gauss_stress(
+        solid_stress_material_gauss,
+        density,
+        exponent=relaxation_exponent,
+    )
+    return evaluate_gauss_maximum_stress(relaxed_stress, strength)
+
+
 def critical_failure_location(
     result: GaussFailureResult,
     *,
@@ -240,4 +262,3 @@ def predicted_failure_load(
     if maximum_failure_index == 0.0:
         return float("inf")
     return reference_load / maximum_failure_index
-
