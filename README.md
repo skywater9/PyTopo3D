@@ -88,6 +88,13 @@ maxima. Detailed global/material stress and failure arrays are saved with
 unrelaxed full-density material stress; only solid elements are eligible in the
 binary result.
 
+The optimization-facing smooth failure measure first takes the maximum of the
+eight Gauss-point indices in each eligible element, then applies a normalized
+corrected p-norm (default `p=8`). Its correction factor is calibrated at a
+reference design and held fixed during each gradient/optimization stage;
+recalibrating it for every design would recreate the nonsmooth exact maximum.
+The exact maximum is always retained as a separate diagnostic.
+
 ## Installation
 
 You can install PyTopo3D in two ways:
