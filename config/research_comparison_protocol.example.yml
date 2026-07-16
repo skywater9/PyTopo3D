@@ -1,0 +1,59 @@
+# Stage 11 A/B/C research protocol.  Array inputs (force, supports, masks, and
+# initial design) are supplied explicitly through ComparisonInputs and are
+# saved and hashed by run_research_comparison().
+schema_version: 1
+comparison_id: offset_tension_v1
+load_case_name: offset_tension
+code_version_id: git-commit-or-release-tag-required
+material_system_id: measured_pla_batch_001
+material_data_provenance: measured  # measured | literature | synthetic
+
+mesh:
+  nelx: 40
+  nely: 20
+  nelz: 4
+  elem_size_m: 0.001
+
+optimization:
+  volfrac: 0.30
+  penal: 3.0
+  rmin: 1.6
+  optimizer: mma
+  disp_thres: 0.5
+  tolx: 0.01
+  maxloop: 500
+  beta_schedule: [1, 2, 4, 8]
+  projection_eta: 0.5
+  failure_limit_schedule: [1.5, 1.25, 1.1, 0.9]
+  failure_aggregate_exponent_schedule: [4, 6, 8, 8]
+  failure_relaxation_exponent: 0.5
+  mma_move: 0.05
+  mma_min_density: 0.001
+  binary_threshold: 0.5
+  use_gpu: false
+  acceptable_termination_statuses: [converged]
+  require_continuation_completed: true
+  require_projection_converged: true
+
+materials:
+  # Design A is derived from this same material batch by the registered rule.
+  isotropic_optimizer_material_id: measured_pla_batch_001_axis_average_E_nu
+  orthotropic_material_id: measured_pla_batch_001
+  isotropic_surrogate_method: axis_average_E_nu
+  orientation_xyz: xyz
+  # Optional; leave null rather than guessing.  Predicted mass is omitted when null.
+  bulk_density_kg_m3: null
+
+validation:
+  binary_volume_tolerance: 0.02
+  minimum_experimental_replicates: 3
+  topology_change_threshold: 0.02
+  ansys_relative_tolerance: 0.25
+  experimental_relative_tolerance: 0.35
+  critical_location_tolerance_elements: 1.75
+  measured_volume_relative_tolerance: 0.05
+  measured_mass_relative_tolerance: 0.05
+  minimum_failure_force_improvement_ratio: 1.10
+  minimum_standardized_effect_size: 0.80
+  stiffness_observable: dominant_axis_absolute_force_over_absolute_mean_loaded_patch_displacement_N_per_m
+  failure_force_observable: sum_absolute_loaded_dof_force_scaled_to_failure_index_one_N

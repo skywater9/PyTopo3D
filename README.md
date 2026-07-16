@@ -156,6 +156,70 @@ stops with `continuation_stage_infeasible` instead of propagating an invalid
 design into a sharper projection stage. Stage diagnostics record transition
 violation, tail oscillation, rollback, retry, and warm-start checksums.
 
+### Reproducible A/B/C research comparison
+
+`pytopo3d.runners.research_comparison` implements the Stage 11 comparison as a
+separate, preregistered workflow:
+
+- Design A uses a preregistered isotropic surrogate derived from the same
+  orthotropic material-axis constants, with no strength constraint.
+- Design B uses orthotropic stiffness with no strength constraint.
+- Design C uses the same orthotropic stiffness plus directional strength and
+  the failure constraint.
+
+All three use MMA, the same initial design, mesh, free-volume target, filters,
+projection schedule, loads, supports, masks, and binary threshold. Every final
+topology is then independently re-evaluated with the same orthotropic
+stiffness, strengths, and orientation. This keeps A's optimizer-objective
+compliance separate from the common-material compliance used for scientific
+comparison.
+
+Load a protocol such as
+[`config/research_comparison_protocol.example.yml`](config/research_comparison_protocol.example.yml),
+construct `ComparisonInputs` with explicit arrays/material data, and call
+`run_research_comparison(protocol, inputs, output_dir)`. The runner writes the
+protocol, immutable input arrays and SHA-256 manifest, isolated `design_A`,
+`design_B`, and `design_C` results, pairwise A/B and B/C performance/topology
+metrics, strict JSON/CSV reports, and an experimental-measurement CSV template.
+Binary Jaccard/Dice/XOR metrics exclude registered fixture/load/protected
+elements. Optional specimen and ANSYS records are schema-validated and must
+name both the exact common-case SHA-256 and binary-topology SHA-256 they tested.
+Raw specimen data, manufacturing geometry, ANSYS geometry, and ANSYS result
+artifacts must be supplied as real files. Their declared SHA-256 digests are
+recomputed before the files are copied into the comparison's
+`external_artifacts` directory; unresolvable or mismatched files are rejected.
+
+External work normally happens after the optimization run. Call
+`attach_external_validation(comparison_dir, experimental_measurements=...,
+ansys_results=...)` to add either source to the existing comparison without
+rerunning A/B/C. Leaving a source argument as `None` preserves already attached
+records; passing an empty sequence clears that source from the derived report.
+Before attachment, the runner re-hashes every saved common input and projected/
+binary topology and rejects evidence bound to another case or topology.
+
+The protocol records the code version, exact stiffness and failure-force
+observables, acceptable optimizer termination states, continuation/convergence
+requirements, relative-error thresholds, and critical-location tolerance.
+Merely supplying all records does not complete validation: ANSYS failure index,
+failure force, mode, region, and location, plus experimental stiffness, failure
+force, fracture region, and fracture location must meet those preregistered
+agreement checks.
+
+The immutable `simulation_report.json` is hashed before any external evidence
+is applied. Later attachments derive their comparisons from that verified
+snapshot, so editing `comparison.json` cannot silently change the numerical
+baseline. A stronger `research_claim_supported` flag additionally requires
+preregistered C/B force improvement and standardized-effect thresholds plus
+mass/volume fairness; ordinary mean improvement remains explicitly descriptive.
+
+The validation states are deliberately distinct:
+`simulation_invalid`, `simulation_complete_external_pending`,
+`external_validation_partial`, and `validation_complete`. Missing external
+values remain `null`, never zero. The bundled `orthotropic_validation` material
+is synthetic, and the repository contains no ANSYS or specimen results, so its
+research status remains external-validation pending even when the numerical
+A/B/C workflow passes.
+
 ## Installation
 
 You can install PyTopo3D in two ways:
