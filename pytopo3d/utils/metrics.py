@@ -5,7 +5,7 @@ This module provides functions for collecting and reporting metrics from
 topology optimization runs.
 """
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -52,6 +52,7 @@ def collect_metrics(
     stl_exported: bool = False,
     skip_optimization: bool = False,
     optimization_metrics: Optional[Mapping[str, Any]] = None,
+    obstacle_ranges: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
@@ -70,6 +71,7 @@ def collect_metrics(
         design_space_stl: Path to STL file for design space
         pitch: Voxelization pitch for STL
         obstacle_config: Path to obstacle configuration file
+        obstacle_ranges: Named YAML coordinate-range obstacle presets
         animation_fps: Frames per second for animation
         stl_level: Threshold level for STL export
         stl_export_mode: STL export mode (density, binary, blocky)
@@ -115,7 +117,7 @@ def collect_metrics(
         "tolx": tolx,
         "maxloop": maxloop,
         "runtime_seconds": run_time,
-        "has_obstacles": obstacle_config is not None,
+        "has_obstacles": obstacle_config is not None or bool(obstacle_ranges),
         "skip_optimization": skip_optimization,
     }
 
@@ -141,8 +143,11 @@ def collect_metrics(
         metrics["final_binary_voxel_eval"] = final_binary_voxel_eval
 
     # Add obstacle info to metrics
-    if obstacle_config:
-        metrics["obstacle_config"] = obstacle_config
+    if obstacle_config or obstacle_ranges:
+        if obstacle_config:
+            metrics["obstacle_config"] = obstacle_config
+        if obstacle_ranges:
+            metrics["obstacle_ranges"] = list(obstacle_ranges)
         metrics["obstacle_elements"] = int(np.sum(obstacle_mask))
 
     # Add design space info to metrics

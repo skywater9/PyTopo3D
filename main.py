@@ -78,6 +78,7 @@ def main():
             target_nelx=getattr(args, "target_nelx", None),
             invert_design_space=getattr(args, "invert_design_space", False),
             obstacle_config=getattr(args, "obstacle_config", None),
+            obstacle_ranges=getattr(args, "obstacle_ranges", None),
             experiment_name=args.experiment_name,
             logger=logger,
             results_mgr=results_mgr,
@@ -293,7 +294,11 @@ def main():
                 ),
                 smooth_failure_limit=optimization_diagnostics.get("failure_limit"),
                 use_gpu=args.gpu,
-                results_manager=results_mgr,
+                results_manager=(
+                    results_mgr
+                    if getattr(args, "save_failure_fields", False)
+                    else None
+                ),
             )
             final_response_metrics = failure_postprocessing.projected_response
             optimization_diagnostics.update(failure_postprocessing.metrics)
@@ -579,6 +584,7 @@ def main():
             design_space_stl=getattr(args, "design_space_stl", None),
             pitch=getattr(args, "pitch", 1.0),
             obstacle_config=getattr(args, "obstacle_config", None),
+            obstacle_ranges=getattr(args, "obstacle_ranges", None),
             animation_fps=getattr(args, "animation_fps", 5),
             stl_level=getattr(args, "stl_level", 0.5),
             stl_export_mode=getattr(args, "export_mode", "density"),

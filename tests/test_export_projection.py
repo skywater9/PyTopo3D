@@ -23,6 +23,7 @@ def test_projection_cli_defaults_and_per_stage_alias():
     assert defaults.failure_relaxation_exponent == 0.5
     assert defaults.failure_limit_schedule is None
     assert defaults.failure_aggregate_exponent_schedule is None
+    assert defaults.save_failure_fields is False
 
     custom = parse_args(
         [
@@ -39,6 +40,7 @@ def test_projection_cli_defaults_and_per_stage_alias():
             "--failure-aggregate-exponent-schedule",
             "4",
             "8",
+            "--save-failure-fields",
         ]
     )
     assert custom.beta_schedule == [1.0, 3.0]
@@ -46,6 +48,7 @@ def test_projection_cli_defaults_and_per_stage_alias():
     assert custom.maxloop == 7
     assert custom.failure_limit_schedule == [1.5, 1.0]
     assert custom.failure_aggregate_exponent_schedule == [4.0, 8.0]
+    assert custom.save_failure_fields is True
 
 
 def test_project_yxz_calibration_block_exports_at_physical_scale():

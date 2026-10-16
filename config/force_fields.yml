@@ -12,46 +12,24 @@ force_field_0:
   F_y: 0
   F_z: 0
 
-tensile_test:
-  x1: 0
-  x2: 30
-  y1: 139
-  y2: 140
-  z1: 0
-  z2: 4
-  F_x: 0.0
-  F_y: 1.0
-  F_z: 0.0
-
-cantilever_test:
-  x1: 19
-  x2: 20
-  y1: 0
-  y2: 20
-  z1: 55
-  z2: 60
-  F_x: -1.0
-  F_y: 0.0
-  F_z: 0.0 
-
-debug_force_field_20x20x100:
-  x1: 0
-  x2: 20
-  y1: 0
-  y2: 20
+force_field_TO_A:
+  x1: 140
+  x2: 180
+  y1: 90
+  y2: 160
   z1: 0
   z2: 1
-  F_x: 0.0
-  F_y: 0.0
-  F_z: -200
+  F_x: 500
+  F_y: 0
+  F_z: 0
 
-sheet_hole_4x50x160:
-  x1: 0
-  x2: 4
+force_field_TO_C:
+  x1: 140
+  x2: 180
   y1: 0
-  y2: 50
-  z1: 159
-  z2: 160
-  F_x: 0.0
-  F_y: 0.0
-  F_z: -200
+  y2: 70
+  z1: 0
+  z2: 1
+  F_x: 500
+  F_y: 0
+  F_z: 0

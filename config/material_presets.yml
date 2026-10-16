@@ -11,6 +11,29 @@
 # A preset only supports failure evaluation when it contains a complete
 # ``strength`` mapping. Production strengths are intentionally not guessed:
 # they depend strongly on the printer, process settings, and test method.
+pla_aniso_experimental:
+  # Anisotropic PLA values from experiments
+  E_x: 2.892e9
+  E_y: 1.738e9
+  E_z: 1.377e9
+  G_xy: 0.92e9 # taken from paper
+  G_yz: 0.8e9 # taken from paper
+  G_zx: 0.84e9 # taken from paper
+  nu_xy: 0.43 # taken from paper
+  nu_yz: 0.34 # taken from paper
+  nu_zx: 0.306 # taken from paper
+  strength:
+    units: Pa
+    X_t: 38.447e6
+    X_c: 38.447e6 #estimated
+    Y_t: 21.048e6
+    Y_c: 21.048e6 #estimated
+    Z_t: 17.905e6
+    Z_c: 17.905e6 #estimated
+    S_xy: 25.5e6 # taken from paper
+    S_yz: 19.0e6 # estimated
+    S_zx: 22.1e6 # taken from paper
+    criterion: maximum_stress
 
 pla_anisotropic:
   # FDM PLA with layer lines (X) perpendicular to pull (Y)

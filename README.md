@@ -45,7 +45,7 @@ This code performs 3D structural topology optimization using the SIMP (Solid Iso
 - Parallel solver (PyPardiso if available, otherwise SciPy's spsolve)
 - Precomputed assembly mapping for fast matrix assembly
 - Support for obstacle regions where no material can be placed
-- Flexible obstacle configuration via JSON files
+- Flexible obstacle configuration via JSON shapes and YAML coordinate ranges
 - Advanced visualization capabilities including animation generation
 
 ## Mechanics and material-coordinate conventions
@@ -83,10 +83,10 @@ When a strength-aware preset is selected, every completed run performs separate
 projected-density and thresholded-binary solves. It records the exact maximum
 failure index, predicted first-failure load, zero-based critical element and
 Gauss-point indices, controlling mode, and separate design/fixture-region
-maxima. Detailed global/material stress and failure arrays are saved with
-`_projected.npy` and `_binary.npy` suffixes. This final reporting uses
-unrelaxed full-density material stress; only solid elements are eligible in the
-binary result.
+maxima in `metrics.json`. Pass `--save-failure-fields` to additionally save
+the detailed global/material stress and failure arrays with `_projected.npy`
+and `_binary.npy` suffixes. This final reporting uses unrelaxed full-density
+material stress; only solid elements are eligible in the binary result.
 
 Final verification also reports, for both representations, compliance,
 dominant-direction predicted stiffness, `V/V0` over the non-obstacle reference
@@ -378,6 +378,15 @@ PyTopo3D supports defining regions where material should not be placed during op
 python main.py --obstacle-config examples/obstacles_config_cylinder.json
 ```
 
+Named cuboid ranges can instead be selected from `config/obstacle_ranges.yml`:
+
+```bash
+python main.py --obstacle-ranges fixture_clearance cable_channel
+```
+
+The two options are additive, so JSON shape obstacles and YAML range obstacles
+can be used in the same run.
+
 #### Python API Usage
 
 ```python
@@ -439,6 +448,23 @@ Supported obstacle types:
 - `cylinder`: A cylinder. Use `radius`, `height`, and `axis` (0=x, 1=y, 2=z) to configure.
 
 All positions are specified as fractions [0-1] of the domain size, making it easy to reuse configurations across different mesh resolutions.
+
+For exact element-coordinate cuboids, add named entries to
+`config/obstacle_ranges.yml` using the same format as protected zones:
+
+```yaml
+fixture_clearance:
+  x1: 10
+  x2: 20
+  y1: 4
+  y2: 12
+  z1: 0
+  z2: 3
+```
+
+Coordinates are zero-based element indices. Upper bounds are exclusive, so the
+example protects the void region `[10, 20)` in x, `[4, 12)` in y, and `[0, 3)`
+in z. Ranges must be non-empty and remain inside the optimization domain.
 
 ### Design Space Customization
 

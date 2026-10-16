@@ -12,6 +12,20 @@ from typing import Mapping, Optional, Sequence, Tuple
 import numpy as np
 import yaml
 
+
+def _get_preset(presets: Mapping[str, object], name: str):
+    """Return a preset by name without making YAML key casing significant."""
+    normalized_name = name.casefold()
+    return next(
+        (
+            preset
+            for preset_name, preset in presets.items()
+            if preset_name.casefold() == normalized_name
+        ),
+        None,
+    )
+
+
 current_dir = Path(__file__).parent
 protected_zones_path = current_dir.parent.parent / "config" / "protected_zone_ranges.yml"
 with open(protected_zones_path, "r") as f:
@@ -33,7 +47,7 @@ def get_protected_zone_ranges(zone_names: tuple):
     """
     ranges = []
     for name in zone_names:
-        zone = protected_zones.get(name.lower())
+        zone = _get_preset(protected_zones, name)
         if zone is None:
             raise ValueError(f"Protected zone '{name}' not found.")
         zone_range = (
@@ -45,6 +59,31 @@ def get_protected_zone_ranges(zone_names: tuple):
             zone.get("z2"),
         )
         ranges.append(zone_range)
+    return tuple(ranges)
+
+
+obstacle_ranges_path = current_dir.parent.parent / "config" / "obstacle_ranges.yml"
+with open(obstacle_ranges_path, "r") as f:
+    obstacle_ranges = yaml.safe_load(f) or {}
+
+
+def get_obstacle_ranges(range_names: Sequence[str]):
+    """Return coordinate ranges for named protected-void obstacle presets."""
+    ranges = []
+    for name in range_names:
+        obstacle = _get_preset(obstacle_ranges, name)
+        if obstacle is None:
+            raise ValueError(f"Obstacle range '{name}' not found.")
+        ranges.append(
+            (
+                obstacle.get("x1"),
+                obstacle.get("x2"),
+                obstacle.get("y1"),
+                obstacle.get("y2"),
+                obstacle.get("z1"),
+                obstacle.get("z2"),
+            )
+        )
     return tuple(ranges)
 
 current_dir = Path(__file__).parent
@@ -75,7 +114,7 @@ def get_material_params(material_name: str):
     material_properties
         Tuple containing the material's stiffness and Poisson ratio parameters.
     """
-    material = materials.get(material_name.lower())
+    material = _get_preset(materials, material_name)
     if material is None:
         raise ValueError(f"Material '{material_name}' not found.")
 
@@ -201,7 +240,7 @@ def validate_material_strength(
 
 def get_material_strength(material_name: str) -> MaterialStrength:
     """Load validated material-axis strength allowables for a preset."""
-    material = materials.get(material_name.lower())
+    material = _get_preset(materials, material_name)
     if material is None:
         raise ValueError(f"Material '{material_name}' not found.")
     if "strength" not in material:
@@ -221,7 +260,7 @@ def material_has_strength(material_name: str) -> bool:
     Declaration and validity are intentionally separate: callers should then
     use :func:`get_material_strength`, which rejects incomplete or invalid data.
     """
-    material = materials.get(material_name.lower())
+    material = _get_preset(materials, material_name)
     if material is None:
         raise ValueError(f"Material '{material_name}' not found.")
     return "strength" in material
@@ -365,7 +404,7 @@ def get_force_field_params(force_field_name: str):
     force_field_params
         Tuple containing the range and force vector of the force field
     """
-    force_field = force_fields.get(force_field_name.lower())
+    force_field = _get_preset(force_fields, force_field_name)
     if force_field is None:
         raise ValueError(f"Force field '{force_field_name}' not found.")
 
@@ -403,7 +442,7 @@ def get_support_mask_params(support_mask_name: str):
     support_mask_params
         Tuple containing the range of the support mask
     """
-    support_mask = support_masks.get(support_mask_name.lower())
+    support_mask = _get_preset(support_masks, support_mask_name)
     if support_mask is None:
         raise ValueError(f"Support mask '{support_mask_name}' not found.")
 

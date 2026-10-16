@@ -247,6 +247,14 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Export the final optimization result as an STL file",
     )
     output_group.add_argument(
+        "--save-failure-fields",
+        action="store_true",
+        help=(
+            "Save detailed projected and binary stress/failure .npy arrays. "
+            "Summary failure metrics are always retained in metrics.json"
+        ),
+    )
+    output_group.add_argument(
         "--stl-level",
         type=float,
         default=0.5,
@@ -343,6 +351,16 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     obstacle_group.add_argument(
         "--obstacle-config", type=str, help="Path to a JSON file defining obstacles"
     )
+    obstacle_group.add_argument(
+        "--obstacle-ranges",
+        nargs="+",
+        type=str,
+        default=None,
+        help=(
+            "Named coordinate-range obstacle presets from config/obstacle_ranges.yml "
+            "(space-separated)"
+        ),
+    )
 
     # Logging parameters
     log_group = parser.add_argument_group("Logging parameters")
@@ -395,6 +413,8 @@ def generate_experiment_name(args: argparse.Namespace) -> str:
     obstacle_type = "no_obstacle"
     if args.obstacle_config:
         obstacle_type = os.path.basename(args.obstacle_config).replace(".json", "")
+    elif getattr(args, "obstacle_ranges", None):
+        obstacle_type = "range_obstacles"
 
     # Include design space STL info in experiment name if provided
     design_space = ""

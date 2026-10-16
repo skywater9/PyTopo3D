@@ -104,6 +104,7 @@ def main(args: Optional[List[str]] = None) -> int:
             target_nelx=getattr(parsed_args, "target_nelx", None),
             invert_design_space=getattr(parsed_args, "invert_design_space", False),
             obstacle_config=getattr(parsed_args, "obstacle_config", None),
+            obstacle_ranges=getattr(parsed_args, "obstacle_ranges", None),
             experiment_name=parsed_args.experiment_name,
             logger=logger,
             results_mgr=results_mgr,
@@ -331,7 +332,11 @@ def main(args: Optional[List[str]] = None) -> int:
                 ),
                 smooth_failure_limit=optimization_diagnostics.get("failure_limit"),
                 use_gpu=parsed_args.gpu,
-                results_manager=results_mgr,
+                results_manager=(
+                    results_mgr
+                    if getattr(parsed_args, "save_failure_fields", False)
+                    else None
+                ),
             )
             final_response_metrics = failure_postprocessing.projected_response
             optimization_diagnostics.update(failure_postprocessing.metrics)
@@ -505,6 +510,7 @@ def main(args: Optional[List[str]] = None) -> int:
             design_space_stl=getattr(parsed_args, "design_space_stl", None),
             pitch=getattr(parsed_args, "pitch", 1.0),
             obstacle_config=getattr(parsed_args, "obstacle_config", None),
+            obstacle_ranges=getattr(parsed_args, "obstacle_ranges", None),
             animation_fps=getattr(parsed_args, "animation_fps", 5),
             stl_level=getattr(parsed_args, "stl_level", 0.5),
             stl_export_mode=getattr(parsed_args, "export_mode", "density"),
