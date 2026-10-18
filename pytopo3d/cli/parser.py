@@ -65,6 +65,71 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Maximum OC design-variable change per iteration",
     )
     basic_group.add_argument(
+        "--optimization-mode",
+        choices=["compliance", "compliance_failure_constrained"],
+        default="compliance",
+        help="Optimization problem formulation",
+    )
+    basic_group.add_argument(
+        "--optimizer",
+        choices=["oc", "mma"],
+        default="oc",
+        help="Design update algorithm (failure constraints require MMA)",
+    )
+    basic_group.add_argument(
+        "--mma-move-limit",
+        type=float,
+        default=0.05,
+        help="Maximum MMA free-variable change per iteration",
+    )
+    basic_group.add_argument(
+        "--mma-min-density",
+        type=float,
+        default=1.0e-3,
+        help=(
+            "Positive lower bound for free failure-constrained MMA variables; "
+            "protected voids remain exactly zero"
+        ),
+    )
+    basic_group.add_argument(
+        "--failure-limit",
+        type=float,
+        default=1.0,
+        help="Upper limit applied to the smooth failure aggregate",
+    )
+    basic_group.add_argument(
+        "--failure-aggregate-exponent",
+        type=float,
+        default=8.0,
+        help="Corrected normalized p-norm exponent for failure aggregation",
+    )
+    basic_group.add_argument(
+        "--failure-relaxation-exponent",
+        type=float,
+        default=0.5,
+        help="Numerical gray-stress relaxation exponent q",
+    )
+    basic_group.add_argument(
+        "--failure-limit-schedule",
+        type=float,
+        nargs="+",
+        default=None,
+        help=(
+            "Optional nonincreasing failure limits, one value or one per beta "
+            "stage (for example 1.5 1.25 1.1 1.0)"
+        ),
+    )
+    basic_group.add_argument(
+        "--failure-aggregate-exponent-schedule",
+        type=float,
+        nargs="+",
+        default=None,
+        help=(
+            "Optional nondecreasing corrected p-norm exponents, one value or "
+            "one per beta stage"
+        ),
+    )
+    basic_group.add_argument(
         "--disp_thres",
         type=float,
         default=0.5,
@@ -182,6 +247,14 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Export the final optimization result as an STL file",
     )
     output_group.add_argument(
+        "--save-failure-fields",
+        action="store_true",
+        help=(
+            "Save detailed projected and binary stress/failure .npy arrays. "
+            "Summary failure metrics are always retained in metrics.json"
+        ),
+    )
+    output_group.add_argument(
         "--stl-level",
         type=float,
         default=0.5,
@@ -278,6 +351,16 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     obstacle_group.add_argument(
         "--obstacle-config", type=str, help="Path to a JSON file defining obstacles"
     )
+    obstacle_group.add_argument(
+        "--obstacle-ranges",
+        nargs="+",
+        type=str,
+        default=None,
+        help=(
+            "Named coordinate-range obstacle presets from config/obstacle_ranges.yml "
+            "(space-separated)"
+        ),
+    )
 
     # Logging parameters
     log_group = parser.add_argument_group("Logging parameters")
@@ -330,6 +413,8 @@ def generate_experiment_name(args: argparse.Namespace) -> str:
     obstacle_type = "no_obstacle"
     if args.obstacle_config:
         obstacle_type = os.path.basename(args.obstacle_config).replace(".json", "")
+    elif getattr(args, "obstacle_ranges", None):
+        obstacle_type = "range_obstacles"
 
     # Include design space STL info in experiment name if provided
     design_space = ""

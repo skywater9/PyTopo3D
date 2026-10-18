@@ -7,13 +7,14 @@ and creating boundary conditions.
 
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
 from pytopo3d.utils.boundary import create_boundary_arrays
+from pytopo3d.utils.config_loader import get_obstacle_ranges
 from pytopo3d.utils.import_design_space import stl_to_design_space
-from pytopo3d.utils.obstacles import parse_obstacle_config_file
+from pytopo3d.utils.obstacles import create_range_obstacle, parse_obstacle_config_file
 from pytopo3d.utils.results_manager import ResultsManager
 from pytopo3d.visualization.runner import create_visualization
 
@@ -29,6 +30,7 @@ def load_geometry_data(
     experiment_name: str = "experiment",
     logger: Optional[logging.Logger] = None,
     results_mgr: Optional[ResultsManager] = None,
+    obstacle_ranges: Optional[Sequence[str]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int, int, int]:
     """
     Load design space and obstacle data.
@@ -44,6 +46,7 @@ def load_geometry_data(
         experiment_name: Name of the experiment
         logger: Configured logger
         results_mgr: Results manager instance
+        obstacle_ranges: Names of coordinate-range presets in config/obstacle_ranges.yml
 
     Returns:
         Tuple containing design space mask, obstacle mask, combined obstacle mask, and dimensions in x,y and z.
@@ -134,9 +137,10 @@ def load_geometry_data(
             raise
     else:
         if logger:
-            logger.info(
-                "No obstacle configuration provided, creating a default empty obstacle mask"
-            )
+            if not obstacle_ranges:
+                logger.info(
+                    "No obstacle configuration provided, creating a default empty obstacle mask"
+                )
         if design_space_stl:
             obstacle_mask = np.zeros_like(design_space_mask)
         else:
@@ -159,6 +163,21 @@ def load_geometry_data(
         # obstacle mask format patch
         obstacle_mask = np.transpose(obstacle_mask, (1, 0, 2))
         combined_obstacle_mask = np.transpose(combined_obstacle_mask, (1, 0, 2))
+
+    # Apply exact coordinate ranges after any STL-axis normalization so their
+    # coordinates always use the public (x, y, z) domain convention.
+    if obstacle_ranges:
+        range_mask = np.zeros_like(obstacle_mask, dtype=bool)
+        for coordinate_range in get_obstacle_ranges(obstacle_ranges):
+            range_mask |= create_range_obstacle(range_mask.shape, coordinate_range)
+        obstacle_mask |= range_mask
+        combined_obstacle_mask |= range_mask
+        if logger:
+            logger.info(
+                "Applied %d YAML obstacle range(s), restricting %d elements",
+                len(obstacle_ranges),
+                int(np.count_nonzero(range_mask)),
+            )
 
     return design_space_mask, obstacle_mask, combined_obstacle_mask, nelx, nely, nelz
 

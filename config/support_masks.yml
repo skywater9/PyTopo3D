@@ -8,34 +8,18 @@ support_mask_0:
   z1: 0
   z2: 1
 
-tensile_test:
+support_mask_TO_A:
   x1: 0
-  x2: 30
+  x2: 40
   y1: 0
-  y2: 1
-  z1: 0
-  z2: 4
-
-cantilever_test:
-  x1: 0
-  x2: 20
-  y1: 0
-  y2: 20
+  y2: 70
   z1: 0
   z2: 1
 
-debug_support_mask_20x20x100:
+support_mask_TO_C:
   x1: 0
-  x2: 20
+  x2: 40
   y1: 0
-  y2: 20
-  z1: 99
-  z2: 100
-
-sheet_hole_4x50x160:
-  x1: 0
-  x2: 4
-  y1: 0
-  y2: 50
+  y2: 70
   z1: 0
   z2: 1

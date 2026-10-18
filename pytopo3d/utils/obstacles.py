@@ -6,8 +6,46 @@ obstacle configuration files.
 """
 
 import json
+from numbers import Integral
 import numpy as np
 from typing import Dict, List, Tuple, Union, Optional
+
+
+def create_range_obstacle(
+    shape: Tuple[int, int, int],
+    coordinate_range: Tuple[int, int, int, int, int, int],
+) -> np.ndarray:
+    """Create an obstacle from half-open element-index coordinate ranges.
+
+    ``shape`` follows the package convention ``(nely, nelx, nelz)``, while the
+    range is ordered as ``(x1, x2, y1, y2, z1, z2)``. Each upper bound is
+    exclusive, matching normal NumPy/Python slicing.
+    """
+    if len(coordinate_range) != 6:
+        raise ValueError(
+            "Obstacle ranges must contain x1, x2, y1, y2, z1, and z2."
+        )
+
+    names = ("x1", "x2", "y1", "y2", "z1", "z2")
+    values = []
+    for name, value in zip(names, coordinate_range):
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise ValueError(f"Obstacle range {name} must be an integer; got {value!r}.")
+        values.append(int(value))
+
+    x1, x2, y1, y2, z1, z2 = values
+    nely, nelx, nelz = shape
+    bounds = (("x", x1, x2, nelx), ("y", y1, y2, nely), ("z", z1, z2, nelz))
+    for axis, lower, upper, size in bounds:
+        if lower < 0 or upper > size or lower >= upper:
+            raise ValueError(
+                f"Obstacle {axis} range [{lower}, {upper}) is invalid for "
+                f"a domain of size {size}."
+            )
+
+    mask = np.zeros(shape, dtype=bool)
+    mask[y1:y2, x1:x2, z1:z2] = True
+    return mask
 
 def create_cube_obstacle(
     shape: Tuple[int, int, int],
@@ -266,4 +304,4 @@ def parse_obstacle_config_file(
         # Combine with OR operation
         combined_mask = np.logical_or(combined_mask, mask)
     
-    return combined_mask 
+    return combined_mask

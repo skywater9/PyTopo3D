@@ -45,8 +45,180 @@ This code performs 3D structural topology optimization using the SIMP (Solid Iso
 - Parallel solver (PyPardiso if available, otherwise SciPy's spsolve)
 - Precomputed assembly mapping for fast matrix assembly
 - Support for obstacle regions where no material can be placed
-- Flexible obstacle configuration via JSON files
+- Flexible obstacle configuration via JSON shapes and YAML coordinate ranges
 - Advanced visualization capabilities including animation generation
+
+## Mechanics and material-coordinate conventions
+
+PyTopo3D uses SI units: lengths are meters, forces are newtons, and stiffness
+and strength values are pascals. Element grids have array shape
+`(nely, nelx, nelz)` and are flattened in Fortran order (`y`, then `x`, then
+`z`). Every H8 node stores displacement degrees of freedom as `[ux, uy, uz]`.
+
+The solver uses these Voigt orders:
+
+- Stress: `[sigma_xx, sigma_yy, sigma_zz, tau_xy, tau_yz, tau_zx]`
+- Strain: `[epsilon_xx, epsilon_yy, epsilon_zz, gamma_xy, gamma_yz, gamma_zx]`
+
+The shear strains are engineering shear strains; the shear stresses are tensor
+components. A material orientation matrix `R` maps material coordinates to
+global coordinates (`v_global = R @ v_material`). Consequently, stress is
+rotated back for strength evaluation with
+`sigma_material = R.T @ sigma_global @ R`.
+
+The CLI permutation `--material-orientation-xyz zxy`, for example, means
+material X maps to global Z, material Y to global X, and material Z to global
+Y. For FDM presets, material X is the in-layer raster/filament direction,
+material Y is the in-layer transverse direction, and material Z is the build
+direction normal to the layers. Permutation strings label orthotropic axes and
+may represent a reflection; this can change signed shear components but not the
+absolute-shear maximum-stress criterion.
+
+Failure evaluation is available only for presets with a complete, validated
+`strength` section. All nine allowables must be finite and strictly positive in
+Pa. The bundled `orthotropic_validation` preset is synthetic and exists only
+for verification; use measured process-specific strengths for engineering work.
+
+When a strength-aware preset is selected, every completed run performs separate
+projected-density and thresholded-binary solves. It records the exact maximum
+failure index, predicted first-failure load, zero-based critical element and
+Gauss-point indices, controlling mode, and separate design/fixture-region
+maxima in `metrics.json`. Pass `--save-failure-fields` to additionally save
+the detailed global/material stress and failure arrays with `_projected.npy`
+and `_binary.npy` suffixes. This final reporting uses unrelaxed full-density
+material stress; only solid elements are eligible in the binary result.
+
+Final verification also reports, for both representations, compliance,
+dominant-direction predicted stiffness, `V/V0` over the non-obstacle reference
+domain, physical material volume, strength margin, feasibility status, and the
+critical design-versus-fixture region. The binary field is a literal threshold
+of the projected field: only explicit protected-solid zones are prescribed
+solid, while merely being adjacent to an idealized support or load does not add
+material. If a supplied smooth aggregate is feasible but exact binary
+`FImax > 1`, the run is marked as a smooth-to-binary mismatch and records the
+recommended remedies (constraint margin, sharper aggregation/continuation,
+regional constraints, and feature-size control). Mismatch classification uses
+MMA's relative smooth-constraint feasibility tolerance (`1e-3` by default),
+while the exact binary strength check retains a tight numerical tolerance. The
+internal solve does not claim that a boundary hotspot is artifact-free or that
+ANSYS agrees;
+`critical_region_artifact_validation_status` and `ansys_validation_status`
+remain explicitly pending until independent evidence is supplied.
+
+The optimization-facing smooth failure measure first takes the maximum of the
+eight Gauss-point indices in each eligible element, then applies a normalized
+corrected p-norm (default `p=8`). Its correction factor is calibrated at a
+reference design and held fixed during each gradient/optimization stage;
+recalibrating it for every design would recreate the nonsmooth exact maximum.
+The exact maximum is always retained as a separate diagnostic.
+
+During failure-constrained optimization, gray-element stress is evaluated as
+`sigma_hat = rho^q * (C0 @ B @ u)`, initially with `q=0.5`. This deliberately
+uses solid-material stress rather than the SIMP-penalized constitutive matrix:
+near-void elements are relaxed, while narrow gray connections are not made as
+artificially safe as they would be under the stiffness exponent. The value of
+`q` is a numerical regularization choice, not a measured material property.
+Projected and binary post-processing remain separate from this optimization
+measure, and binary failure always uses unrelaxed stress in full-density solid
+elements only.
+
+The failure gradient includes both the explicit derivative
+`q*rho^(q-1)` and the implicit displacement response. A single reduced-system
+adjoint solve computes the latter, after which the existing projection
+derivative and density-filter transpose map the result back to design
+variables. The corrected p-norm calibration and eligibility mask are fixed
+during a sensitivity/optimization stage. Component and Gauss-point maxima use
+a deterministic active-set derivative, so gradient checks must avoid ties.
+For `0 < q < 1`, eligible physical densities must be strictly positive;
+protected voids remain exactly zero and are excluded. `q=0` explicitly means
+no stress relaxation and has zero explicit density derivative.
+
+The original compliance problem continues to use OC by default. Selecting
+`--optimization-mode compliance_failure_constrained --optimizer mma` instead
+minimizes compliance with both physical free-volume and smooth failure
+constraints. MMA updates only free design variables; protected solids and voids
+remain exact. The objective is normalized by a fixed reference while both
+constraints are dimensionless. Elastic subproblem slacks let MMA recover from
+a temporarily infeasible move box, but the final nonlinear constraints are
+always re-evaluated and an infeasible run is reported explicitly rather than
+accepted. For the default `q=0.5`, `--mma-min-density` supplies the required
+positive free-variable lower bound.
+
+Failure continuation can be coupled to the projection stages. A single value
+is broadcast, or `--failure-limit-schedule 1.5 1.25 1.1 1.0` can tighten the
+constraint while `--failure-aggregate-exponent-schedule 4 6 8 8` sharpens the
+smooth maximum. Limits must be nonincreasing and exponents nondecreasing. Each
+stage warm-starts from the preceding design and freezes a newly calibrated
+aggregate correction for that stage. If a dual subproblem is inaccurate, MMA
+retries with contracted move limits. Before advancing, the optimizer restores
+the lowest-compliance feasible iterate; if no feasible iterate was found, it
+stops with `continuation_stage_infeasible` instead of propagating an invalid
+design into a sharper projection stage. Stage diagnostics record transition
+violation, tail oscillation, rollback, retry, and warm-start checksums.
+
+### Reproducible A/B/C research comparison
+
+`pytopo3d.runners.research_comparison` implements the Stage 11 comparison as a
+separate, preregistered workflow:
+
+- Design A uses a preregistered isotropic surrogate derived from the same
+  orthotropic material-axis constants, with no strength constraint.
+- Design B uses orthotropic stiffness with no strength constraint.
+- Design C uses the same orthotropic stiffness plus directional strength and
+  the failure constraint.
+
+All three use MMA, the same initial design, mesh, free-volume target, filters,
+projection schedule, loads, supports, masks, and binary threshold. Every final
+topology is then independently re-evaluated with the same orthotropic
+stiffness, strengths, and orientation. This keeps A's optimizer-objective
+compliance separate from the common-material compliance used for scientific
+comparison.
+
+Load a protocol such as
+[`config/research_comparison_protocol.example.yml`](config/research_comparison_protocol.example.yml),
+construct `ComparisonInputs` with explicit arrays/material data, and call
+`run_research_comparison(protocol, inputs, output_dir)`. The runner writes the
+protocol, immutable input arrays and SHA-256 manifest, isolated `design_A`,
+`design_B`, and `design_C` results, pairwise A/B and B/C performance/topology
+metrics, strict JSON/CSV reports, and an experimental-measurement CSV template.
+Binary Jaccard/Dice/XOR metrics exclude registered fixture/load/protected
+elements. Optional specimen and ANSYS records are schema-validated and must
+name both the exact common-case SHA-256 and binary-topology SHA-256 they tested.
+Raw specimen data, manufacturing geometry, ANSYS geometry, and ANSYS result
+artifacts must be supplied as real files. Their declared SHA-256 digests are
+recomputed before the files are copied into the comparison's
+`external_artifacts` directory; unresolvable or mismatched files are rejected.
+
+External work normally happens after the optimization run. Call
+`attach_external_validation(comparison_dir, experimental_measurements=...,
+ansys_results=...)` to add either source to the existing comparison without
+rerunning A/B/C. Leaving a source argument as `None` preserves already attached
+records; passing an empty sequence clears that source from the derived report.
+Before attachment, the runner re-hashes every saved common input and projected/
+binary topology and rejects evidence bound to another case or topology.
+
+The protocol records the code version, exact stiffness and failure-force
+observables, acceptable optimizer termination states, continuation/convergence
+requirements, relative-error thresholds, and critical-location tolerance.
+Merely supplying all records does not complete validation: ANSYS failure index,
+failure force, mode, region, and location, plus experimental stiffness, failure
+force, fracture region, and fracture location must meet those preregistered
+agreement checks.
+
+The immutable `simulation_report.json` is hashed before any external evidence
+is applied. Later attachments derive their comparisons from that verified
+snapshot, so editing `comparison.json` cannot silently change the numerical
+baseline. A stronger `research_claim_supported` flag additionally requires
+preregistered C/B force improvement and standardized-effect thresholds plus
+mass/volume fairness; ordinary mean improvement remains explicitly descriptive.
+
+The validation states are deliberately distinct:
+`simulation_invalid`, `simulation_complete_external_pending`,
+`external_validation_partial`, and `validation_complete`. Missing external
+values remain `null`, never zero. The bundled `orthotropic_validation` material
+is synthetic, and the repository contains no ANSYS or specimen results, so its
+research status remains external-validation pending even when the numerical
+A/B/C workflow passes.
 
 ## Installation
 
@@ -103,9 +275,18 @@ The main optimization parameters are:
 - `beta_schedule`: Heaviside continuation stages (default: `1 2 4 8`)
 - `projection_eta`: Heaviside threshold (default: 0.5)
 - `move_limit`: Maximum OC design-variable change per iteration (default: 0.2)
+- `optimization_mode`: `compliance` or `compliance_failure_constrained`
+- `optimizer`: `oc` or `mma` (failure constraints require `mma`)
+- `mma_move_limit`: Maximum MMA free-variable change per iteration (default: 0.05)
+- `mma_min_density`: Positive free-variable lower bound for relaxed failure (default: 0.001)
+- `failure_limit`: Smooth failure aggregate limit (default: 1.0)
+- `failure_aggregate_exponent`: Corrected p-norm exponent (default: 8.0)
+- `failure_relaxation_exponent`: Gray-stress relaxation exponent q (default: 0.5)
+- `failure_limit_schedule`: Optional nonincreasing failure-limit continuation
+- `failure_aggregate_exponent_schedule`: Optional nondecreasing p continuation
 - `disp_thres`: Display threshold for 3D visualization (elements with density > disp_thres are shown) (default: 0.5)
 - `tolx`: Convergence tolerance on design change (default: 0.01)
-- `maxloop`: Maximum number of iterations per projection stage (default: 2000)
+- `maxloop`: Maximum nonlinear evaluations per projection stage (default: 2000); MMA uses the final budgeted evaluation for current constraint reporting
 
 The optimizer uses one consistent material field throughout the workflow:
 
@@ -143,6 +324,18 @@ To run a basic optimization:
 ```bash
 python main.py --nelx 32 --nely 16 --nelz 16 --volfrac 0.3 --penal 3.0 --rmin 3.0 \
                --beta-schedule 1 2 4 8 --projection-eta 0.5
+```
+
+For failure-constrained compliance optimization, choose a material preset with
+measured strength data and use MMA:
+
+```bash
+python main.py --material-preset my_measured_material \
+  --optimization-mode compliance_failure_constrained --optimizer mma \
+  --beta-schedule 1 2 4 8 \
+  --failure-limit-schedule 1.5 1.25 1.1 1.0 \
+  --failure-aggregate-exponent-schedule 4 6 8 8 \
+  --failure-relaxation-exponent 0.5 --mma-move-limit 0.05
 ```
 
 For full options:
@@ -184,6 +377,15 @@ PyTopo3D supports defining regions where material should not be placed during op
 ```bash
 python main.py --obstacle-config examples/obstacles_config_cylinder.json
 ```
+
+Named cuboid ranges can instead be selected from `config/obstacle_ranges.yml`:
+
+```bash
+python main.py --obstacle-ranges fixture_clearance cable_channel
+```
+
+The two options are additive, so JSON shape obstacles and YAML range obstacles
+can be used in the same run.
 
 #### Python API Usage
 
@@ -246,6 +448,23 @@ Supported obstacle types:
 - `cylinder`: A cylinder. Use `radius`, `height`, and `axis` (0=x, 1=y, 2=z) to configure.
 
 All positions are specified as fractions [0-1] of the domain size, making it easy to reuse configurations across different mesh resolutions.
+
+For exact element-coordinate cuboids, add named entries to
+`config/obstacle_ranges.yml` using the same format as protected zones:
+
+```yaml
+fixture_clearance:
+  x1: 10
+  x2: 20
+  y1: 4
+  y2: 12
+  z1: 0
+  z2: 3
+```
+
+Coordinates are zero-based element indices. Upper bounds are exclusive, so the
+example protects the void region `[10, 20)` in x, `[4, 12)` in y, and `[0, 3)`
+in z. Ranges must be non-empty and remain inside the optimization domain.
 
 ### Design Space Customization
 

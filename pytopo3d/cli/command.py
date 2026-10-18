@@ -11,6 +11,7 @@ from typing import List, Optional
 import numpy as np
 
 # Import the main function from the main module
+from pytopo3d.analysis.postprocessing import evaluate_failure_representations
 from pytopo3d.cli.parser import parse_args
 from pytopo3d.core.optimizer import (
     evaluate_fixed_geometry_compliance,
@@ -33,7 +34,10 @@ from pytopo3d.utils.config_loader import (
     apply_material_orientation,
     get_force_field_params,
     get_material_params,
+    get_material_strength,
     get_support_mask_params,
+    material_has_strength,
+    material_orientation_matrix,
     parse_material_orientation_xyz,
 )
 from pytopo3d.utils.metrics import collect_metrics
@@ -100,6 +104,7 @@ def main(args: Optional[List[str]] = None) -> int:
             target_nelx=getattr(parsed_args, "target_nelx", None),
             invert_design_space=getattr(parsed_args, "invert_design_space", False),
             obstacle_config=getattr(parsed_args, "obstacle_config", None),
+            obstacle_ranges=getattr(parsed_args, "obstacle_ranges", None),
             experiment_name=parsed_args.experiment_name,
             logger=logger,
             results_mgr=results_mgr,
@@ -133,6 +138,14 @@ def main(args: Optional[List[str]] = None) -> int:
                 logger.warning(
                     "--material-orientation-xyz was provided without --material-preset; orientation mapping is ignored."
                 )
+
+        material_strength = None
+        if material_preset is not None and material_has_strength(material_preset):
+            material_strength = get_material_strength(material_preset)
+            logger.info(
+                "Enabled final maximum-stress failure post-processing for material '%s'",
+                material_preset,
+            )
 
         eval_material_orientation_xyz = parse_material_orientation_xyz(
             getattr(parsed_args, "eval_material_orientation_xyz", None)
@@ -270,19 +283,88 @@ def main(args: Optional[List[str]] = None) -> int:
                 projection_eta=getattr(parsed_args, "projection_eta", 0.5),
                 move=getattr(parsed_args, "move_limit", 0.2),
                 diagnostics_out=optimization_diagnostics,
+                optimization_mode=getattr(
+                    parsed_args, "optimization_mode", "compliance"
+                ),
+                optimizer=getattr(parsed_args, "optimizer", "oc"),
+                material_strength=material_strength,
+                material_orientation=material_orientation_matrix(
+                    material_orientation_xyz
+                ),
+                failure_limit=getattr(parsed_args, "failure_limit", 1.0),
+                failure_aggregate_exponent=getattr(
+                    parsed_args, "failure_aggregate_exponent", 8.0
+                ),
+                failure_relaxation_exponent=getattr(
+                    parsed_args, "failure_relaxation_exponent", 0.5
+                ),
+                mma_move=getattr(parsed_args, "mma_move_limit", 0.05),
+                mma_min_density=getattr(
+                    parsed_args, "mma_min_density", 1.0e-3
+                ),
+                failure_limit_schedule=getattr(
+                    parsed_args, "failure_limit_schedule", None
+                ),
+                failure_aggregate_exponent_schedule=getattr(
+                    parsed_args,
+                    "failure_aggregate_exponent_schedule",
+                    None,
+                ),
             )
 
-        final_response_metrics = evaluate_fixed_geometry_metrics(
-            xPhys=xPhys,
-            penal=parsed_args.penal,
-            material_params=material_params,
-            elem_size=parsed_args.elem_size,
-            force_field=force_field,
-            support_mask=support_mask,
-            obstacle_mask=combined_obstacle_mask,
-            protected_zone_mask=protected_zone_mask,
-            use_gpu=parsed_args.gpu,
-        )
+        if material_strength is not None:
+            failure_postprocessing = evaluate_failure_representations(
+                x_projected=xPhys,
+                binary_threshold=float(getattr(parsed_args, "stl_level", 0.5)),
+                penal=parsed_args.penal,
+                material_params=material_params,
+                strength=material_strength,
+                orientation_matrix=material_orientation_matrix(
+                    material_orientation_xyz
+                ),
+                elem_size=parsed_args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                smooth_failure_aggregate=optimization_diagnostics.get(
+                    "failure_aggregate"
+                ),
+                smooth_failure_limit=optimization_diagnostics.get("failure_limit"),
+                use_gpu=parsed_args.gpu,
+                results_manager=(
+                    results_mgr
+                    if getattr(parsed_args, "save_failure_fields", False)
+                    else None
+                ),
+            )
+            final_response_metrics = failure_postprocessing.projected_response
+            optimization_diagnostics.update(failure_postprocessing.metrics)
+            projected_fi = failure_postprocessing.metrics[
+                "failure_index_max_projected"
+            ]
+            binary_fi = failure_postprocessing.metrics["failure_index_max_binary"]
+            logger.info(
+                "Failure post-processing: projected FI=%s, binary FI=%s, "
+                "internal verification=%s",
+                "n/a" if projected_fi is None else f"{projected_fi:.6e}",
+                "n/a" if binary_fi is None else f"{binary_fi:.6e}",
+                failure_postprocessing.metrics[
+                    "stage10_internal_verification_status"
+                ],
+            )
+        else:
+            final_response_metrics = evaluate_fixed_geometry_metrics(
+                xPhys=xPhys,
+                penal=parsed_args.penal,
+                material_params=material_params,
+                elem_size=parsed_args.elem_size,
+                force_field=force_field,
+                support_mask=support_mask,
+                obstacle_mask=combined_obstacle_mask,
+                protected_zone_mask=protected_zone_mask,
+                use_gpu=parsed_args.gpu,
+            )
 
         if getattr(parsed_args, "skip_optimization", False):
             final_compliance = final_response_metrics["compliance"]
@@ -428,6 +510,7 @@ def main(args: Optional[List[str]] = None) -> int:
             design_space_stl=getattr(parsed_args, "design_space_stl", None),
             pitch=getattr(parsed_args, "pitch", 1.0),
             obstacle_config=getattr(parsed_args, "obstacle_config", None),
+            obstacle_ranges=getattr(parsed_args, "obstacle_ranges", None),
             animation_fps=getattr(parsed_args, "animation_fps", 5),
             stl_level=getattr(parsed_args, "stl_level", 0.5),
             stl_export_mode=getattr(parsed_args, "export_mode", "density"),

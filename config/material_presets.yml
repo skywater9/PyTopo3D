@@ -1,6 +1,63 @@
-# E_x, E_z, E_y: Young's moduli (Pa)
-# nu_xy, nu_yz, nu_zx: Poisson's ratioes (m/m)
-# G_xy, G_yz, G_zx: Shear moduli (Pa)
+# All dimensional material values use SI units.
+# E_x, E_y, E_z: Young's moduli (Pa)
+# nu_xy, nu_yz, nu_zx: Poisson ratios (dimensionless)
+# G_xy, G_yz, G_zx: shear moduli (Pa)
+#
+# Print/material axes for the FDM presets:
+#   X: raster/filament direction in the printed layer
+#   Y: in-layer direction transverse to the raster
+#   Z: build direction, normal to the layer plane
+#
+# A preset only supports failure evaluation when it contains a complete
+# ``strength`` mapping. Production strengths are intentionally not guessed:
+# they depend strongly on the printer, process settings, and test method.
+pla_aniso_experimental:
+  # Anisotropic PLA values from experiments
+  E_x: 2.112e9
+  E_y: 1.601e9
+  E_z: 1.338e9
+  G_xy: 0.92e9 # taken from paper
+  G_yz: 0.8e9 # taken from paper
+  G_zx: 0.84e9 # taken from paper
+  nu_xy: 0.43 # taken from paper
+  nu_yz: 0.34 # taken from paper
+  nu_zx: 0.306 # taken from paper
+  strength:
+    units: Pa
+    X_t: 39.029e6
+    X_c: 39.029e6 #estimated
+    Y_t: 22.298e6
+    Y_c: 22.298e6 #estimated
+    Z_t: 17.931e6
+    Z_c: 17.931e6 #estimated
+    S_xy: 25.5e6 # taken from paper
+    S_yz: 19.0e6 # estimated
+    S_zx: 22.1e6 # taken from paper
+    criterion: maximum_stress
+
+pla_isotropic_experimental:
+  # Averaged experimental values
+  E_x: 1.684e9
+  E_y: 1.684e9
+  E_z: 1.684e9
+  G_xy: 0.85e9 # taken from paper
+  G_yz: 0.85e9 # taken from paper
+  G_zx: 0.85e9 # taken from paper
+  nu_xy: 0.359 # taken from paper
+  nu_yz: 0.359 # taken from paper
+  nu_zx: 0.359 # taken from paper
+  strength:
+    units: Pa
+    X_t: 26.419e6
+    X_c: 26.4199e6 #estimated
+    Y_t: 26.419e6
+    Y_c: 26.419e6 #estimated
+    Z_t: 26.419e6
+    Z_c: 26.419e6 #estimated
+    S_xy: 22.2e6 # taken from paper
+    S_yz: 22.2e6 # estimated
+    S_zx: 22.2e6 # taken from paper
+    criterion: maximum_stress
 
 pla_anisotropic:
   # FDM PLA with layer lines (X) perpendicular to pull (Y)
@@ -52,3 +109,28 @@ aluminum_5052_h32:
   nu_xy: 0.33
   nu_yz: 0.33
   nu_zx: 0.33
+
+# Synthetic, non-production material used to validate stress/failure code.
+# Replace these allowables with measured values before engineering use.
+orthotropic_validation:
+  E_x: 12.0e9
+  E_y: 8.0e9
+  E_z: 5.0e9
+  G_xy: 3.0e9
+  G_yz: 2.0e9
+  G_zx: 2.5e9
+  nu_xy: 0.22
+  nu_yz: 0.18
+  nu_zx: 0.16
+  strength:
+    units: Pa
+    X_t: 120.0e6
+    X_c: 150.0e6
+    Y_t: 80.0e6
+    Y_c: 100.0e6
+    Z_t: 45.0e6
+    Z_c: 70.0e6
+    S_xy: 50.0e6
+    S_yz: 30.0e6
+    S_zx: 35.0e6
+    criterion: maximum_stress
