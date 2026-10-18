@@ -13,9 +13,9 @@
 # they depend strongly on the printer, process settings, and test method.
 pla_aniso_experimental:
   # Anisotropic PLA values from experiments
-  E_x: 2.892e9
-  E_y: 1.738e9
-  E_z: 1.377e9
+  E_x: 2.112e9
+  E_y: 1.601e9
+  E_z: 1.338e9
   G_xy: 0.92e9 # taken from paper
   G_yz: 0.8e9 # taken from paper
   G_zx: 0.84e9 # taken from paper
@@ -24,15 +24,39 @@ pla_aniso_experimental:
   nu_zx: 0.306 # taken from paper
   strength:
     units: Pa
-    X_t: 38.447e6
-    X_c: 38.447e6 #estimated
-    Y_t: 21.048e6
-    Y_c: 21.048e6 #estimated
-    Z_t: 17.905e6
-    Z_c: 17.905e6 #estimated
+    X_t: 39.029e6
+    X_c: 39.029e6 #estimated
+    Y_t: 22.298e6
+    Y_c: 22.298e6 #estimated
+    Z_t: 17.931e6
+    Z_c: 17.931e6 #estimated
     S_xy: 25.5e6 # taken from paper
     S_yz: 19.0e6 # estimated
     S_zx: 22.1e6 # taken from paper
+    criterion: maximum_stress
+
+pla_isotropic_experimental:
+  # Averaged experimental values
+  E_x: 1.684e9
+  E_y: 1.684e9
+  E_z: 1.684e9
+  G_xy: 0.85e9 # taken from paper
+  G_yz: 0.85e9 # taken from paper
+  G_zx: 0.85e9 # taken from paper
+  nu_xy: 0.359 # taken from paper
+  nu_yz: 0.359 # taken from paper
+  nu_zx: 0.359 # taken from paper
+  strength:
+    units: Pa
+    X_t: 26.419e6
+    X_c: 26.4199e6 #estimated
+    Y_t: 26.419e6
+    Y_c: 26.419e6 #estimated
+    Z_t: 26.419e6
+    Z_c: 26.419e6 #estimated
+    S_xy: 22.2e6 # taken from paper
+    S_yz: 22.2e6 # estimated
+    S_zx: 22.2e6 # taken from paper
     criterion: maximum_stress
 
 pla_anisotropic:

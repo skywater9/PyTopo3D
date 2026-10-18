@@ -3,7 +3,7 @@ cd /d "%~dp0.."
 
 .venv\Scripts\python.exe main.py ^
   --nelx 180 ^
-  --nely 140 ^
+  --nely 130 ^
   --nelz 1 ^
   --volfrac 0.4 ^
   --penal 3.0 ^
