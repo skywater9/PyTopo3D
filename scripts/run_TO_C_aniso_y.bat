@@ -5,12 +5,14 @@ cd /d "%~dp0.."
   --nelx 180 ^
   --nely 130 ^
   --nelz 1 ^
+  --x-axis-scale 0.18
+  --y-axis-scale 0.13
+  --z-axis-scale 0.004 ^
   --volfrac 0.4 ^
   --penal 3.0 ^
   --rmin 3.0 ^
   --tolx 0.01 ^
   --maxloop 200 ^
-  --elem-size 0.001 ^
   --export-stl ^
   --material-preset pla_aniso_experimental ^
   --material-orientation-xyz yxz ^
