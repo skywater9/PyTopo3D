@@ -21,6 +21,7 @@ from pytopo3d.analysis.stress import (
 )
 from pytopo3d.core.optimizer import evaluate_fixed_geometry_metrics
 from pytopo3d.utils.config_loader import MaterialStrength
+from pytopo3d.utils.element_size import ElementSize, element_size_xyz
 from pytopo3d.utils.stiffness import make_C_matrix
 
 
@@ -257,7 +258,7 @@ def evaluate_failure_fields(
     constitutive_matrix_global: np.ndarray,
     orientation_matrix: np.ndarray,
     strength: MaterialStrength,
-    elem_size: float,
+    elem_size: ElementSize,
     all_elements: np.ndarray,
     design_elements: np.ndarray,
     fixture_elements: np.ndarray,
@@ -355,7 +356,7 @@ def evaluate_failure_representations(
     material_params: Sequence[float],
     strength: MaterialStrength,
     orientation_matrix: np.ndarray,
-    elem_size: float,
+    elem_size: ElementSize,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
     obstacle_mask: Optional[np.ndarray] = None,
@@ -502,7 +503,7 @@ def evaluate_failure_representations(
     )
 
     design_region = non_obstacle & ~fixture
-    element_volume = float(elem_size) ** 3
+    element_volume = float(np.prod(element_size_xyz(elem_size)))
     reference_element_count = int(np.sum(non_obstacle))
     design_element_count = int(np.sum(design_region))
 

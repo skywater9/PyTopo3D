@@ -11,6 +11,8 @@ from typing import Any, Dict, MutableMapping, Optional, Sequence, Tuple
 
 import numpy as np
 
+from pytopo3d.utils.element_size import ElementSize
+
 from pytopo3d.core.optimizer import top3d
 from pytopo3d.utils.export import voxel_to_stl
 from pytopo3d.utils.logger import setup_logger
@@ -101,7 +103,7 @@ def execute_optimization(
     rmin: float,
     disp_thres: float,
     material_params: Optional[Sequence[float]] = None,
-    elem_size: float = 0.01,
+    elem_size: ElementSize = 0.01,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
     tolx: float = 0.01,
@@ -249,7 +251,7 @@ def export_result_to_stl(
     logger: logging.Logger = None,
     results_mgr: ResultsManager = None,
     result_path: str = None,
-    elem_size: float = 1.0,
+    elem_size: ElementSize = 1.0,
 ) -> bool:
     """
     Export the optimization result as an STL file if requested.

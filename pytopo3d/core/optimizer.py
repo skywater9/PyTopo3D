@@ -16,6 +16,8 @@ import time
 from typing import Any, Dict, MutableMapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
+from pytopo3d.utils.element_size import ElementSize
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
@@ -150,7 +152,7 @@ def evaluate_fixed_geometry_metrics(
     xPhys: np.ndarray,
     penal: float,
     material_params: Optional[Tuple[float, ...]] = None,
-    elem_size: float = 0.01,
+    elem_size: ElementSize = 0.01,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
     obstacle_mask: Optional[np.ndarray] = None,
@@ -364,7 +366,7 @@ def evaluate_fixed_geometry_compliance(
     xPhys: np.ndarray,
     penal: float,
     material_params: Optional[Tuple[float, ...]] = None,
-    elem_size: float = 0.01,
+    elem_size: ElementSize = 0.01,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,
     obstacle_mask: Optional[np.ndarray] = None,
@@ -397,7 +399,7 @@ def top3d(
     rmin: float,
     disp_thres: float,
     material_params: Optional[Sequence[float]] = None,
-    elem_size: float = 0.01,
+    elem_size: ElementSize = 0.01,
     obstacle_mask: Optional[np.ndarray] = None,
     force_field: Optional[np.ndarray] = None,
     support_mask: Optional[np.ndarray] = None,

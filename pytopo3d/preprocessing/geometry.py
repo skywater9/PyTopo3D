@@ -16,6 +16,7 @@ from pytopo3d.utils.config_loader import get_obstacle_ranges
 from pytopo3d.utils.import_design_space import stl_to_design_space
 from pytopo3d.utils.obstacles import create_range_obstacle, parse_obstacle_config_file
 from pytopo3d.utils.results_manager import ResultsManager
+from pytopo3d.utils.element_size import ElementSize
 from pytopo3d.visualization.runner import create_visualization
 
 
@@ -31,6 +32,7 @@ def load_geometry_data(
     logger: Optional[logging.Logger] = None,
     results_mgr: Optional[ResultsManager] = None,
     obstacle_ranges: Optional[Sequence[str]] = None,
+    visualize: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int, int, int]:
     """
     Load design space and obstacle data.
@@ -95,9 +97,10 @@ def load_geometry_data(
                     logger.debug("Copied design space STL file to experiment directory")
 
                 # Visualize the design space mask
-                visualize_design_space_mask(
-                    design_space_mask, experiment_name, results_mgr, logger
-                )
+                if visualize:
+                    visualize_design_space_mask(
+                        design_space_mask, experiment_name, results_mgr, logger
+                    )
 
         except Exception as e:
             if logger:
@@ -183,7 +186,8 @@ def load_geometry_data(
 
 
 def visualize_design_space_mask(
-    design_space_mask, experiment_name, results_mgr, logger
+    design_space_mask, experiment_name, results_mgr, logger,
+    elem_size: Optional[ElementSize] = None,
 ) -> str:
     """
     Create and save visualization of the design space mask.
@@ -205,6 +209,7 @@ def visualize_design_space_mask(
 
     # Create visualization of just the design space
     viz_path = create_visualization(
+        elem_size=elem_size,
         arrays=[design_space_array],
         thresholds=[0.5],
         colors=["green"],

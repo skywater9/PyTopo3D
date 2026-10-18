@@ -15,6 +15,8 @@ from mpl_toolkits.mplot3d import proj3d
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from numpy.typing import NDArray
 
+from pytopo3d.utils.element_size import ElementSize, element_size_xyz
+
 
 class Arrow3D(FancyArrowPatch):
     """
@@ -134,6 +136,7 @@ def display_3D(
     common_threshold: Optional[float] = None,
     labels: Optional[Union[str, List[str]]] = None,
     alphas: Union[float, List[float]] = 0.9,
+    elem_size: Optional[ElementSize] = None,
 ) -> Figure:
     """
     Display multiple 3D structures using Poly3DCollection with color gradients.
@@ -161,6 +164,8 @@ def display_3D(
         If a single float is provided and densities is a list, it will be used for all arrays.
         Use lower values for obstacles/non-design spaces (e.g., 0.3) and higher values for
         the design (e.g., 0.9) for better visualization.
+    elem_size : float or sequence of three floats, optional
+        Element edge lengths in global XYZ meters. If omitted, show grid units.
 
     Returns
     -------
@@ -217,6 +222,8 @@ def display_3D(
 
     # Extract shape dimensions
     nely, nelx, nelz = shape
+    sizes = np.asarray(element_size_xyz(1.0 if elem_size is None else elem_size))
+    domain_size = np.array([nelx, nely, nelz]) * sizes
 
     # Create color maps for each color
     color_maps = []
@@ -233,7 +240,8 @@ def display_3D(
     # without affecting the title position
     ax = fig.add_subplot(111, projection="3d")
     # Update box aspect to match X, Y, Z
-    ax.set_box_aspect((nelx, nely, nelz))
+    # Matplotlib normalizes its input array in place; retain physical limits.
+    ax.set_box_aspect(domain_size.copy())
 
     faces = np.array(
         [
@@ -292,7 +300,7 @@ def display_3D(
                     base_x = i
                     base_y = j  # Plot Y uses array Y (j)
                     base_z = k  # Plot Z uses array Z (k)
-                    verts_global = local_verts + [base_x, base_y, base_z]
+                    verts_global = (local_verts + [base_x, base_y, base_z]) * sizes
                     for f in faces:
                         poly_verts = verts_global[f].tolist()
                         poly_list.append(poly_verts)
@@ -325,14 +333,15 @@ def display_3D(
 
     ax.add_collection3d(pc)
     # Update axis limits to match X, Y, Z
-    ax.set_xlim(0, nelx)
-    ax.set_ylim(0, nely)  # Y limit is nely
-    ax.set_zlim(0, nelz)  # Z limit is nelz
+    ax.set_xlim(0, domain_size[0])
+    ax.set_ylim(0, domain_size[1])
+    ax.set_zlim(0, domain_size[2])
 
     # Set appropriate axis labels
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
+    units = " (m)" if elem_size is not None else ""
+    ax.set_xlabel("X" + units)
+    ax.set_ylabel("Y" + units)
+    ax.set_zlabel("Z" + units)
 
     # Isometric view (can be adjusted)
     ax.view_init(elev=30, azim=30)

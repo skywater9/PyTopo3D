@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pytopo3d.utils.results_manager import ResultsManager
+from pytopo3d.utils.element_size import ElementSize
 from pytopo3d.visualization.display import display_3D
 
 
@@ -25,6 +26,7 @@ def create_frame(
     iteration: int = 0,
     compliance: Optional[float] = None,
     figsize: Tuple[int, int] = (10, 8),
+    elem_size: Optional[ElementSize] = None,
 ) -> plt.Figure:
     """
     Create a frame for the optimization animation.
@@ -89,6 +91,7 @@ def create_frame(
 
     # Create the 3D visualization
     fig = display_3D(
+        elem_size=elem_size,
         densities=arrays,
         thresholds=thresholds,
         colors=colors,
@@ -118,6 +121,7 @@ def save_optimization_gif(
     dpi: int = 100,
     fps: int = 5,
     every_n_iterations: int = 1,
+    elem_size: Optional[ElementSize] = None,
 ) -> str:
     """
     Create and save a GIF animation of the optimization process.
@@ -188,6 +192,7 @@ def save_optimization_gif(
 
         # Create the frame
         fig = create_frame(
+            elem_size=elem_size,
             density=density,
             obstacle_mask=obstacle_mask,
             loads_array=loads_array,

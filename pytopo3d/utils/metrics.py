@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
+from pytopo3d.utils.element_size import ElementSize, element_size_xyz, geometry_metadata
+
 def collect_metrics(
     terminal_input: str,
     nelx: int,
@@ -22,7 +24,7 @@ def collect_metrics(
     material_orientation_xyz: str = None,
     force_field_preset: str = None,
     support_mask_preset: str = None,
-    elem_size: float = 0.01, # 1 cm 
+    elem_size: ElementSize = 0.01, # 1 cm
     tolx: float = 0.01,
     maxloop: int = 2000,
     design_space_stl: Optional[str] = None,
@@ -53,6 +55,9 @@ def collect_metrics(
     skip_optimization: bool = False,
     optimization_metrics: Optional[Mapping[str, Any]] = None,
     obstacle_ranges: Optional[Sequence[str]] = None,
+    x_axis_scale: Optional[float] = None,
+    y_axis_scale: Optional[float] = None,
+    z_axis_scale: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Collect metrics about the optimization run.
@@ -113,7 +118,14 @@ def collect_metrics(
         "material_orientation_xyz": material_orientation_xyz,
         "force_field_preset": force_field_preset,
         "suport_mask_preset": support_mask_preset,
-        "elem_size": elem_size,
+        "elem_size": (float(elem_size) if np.ndim(elem_size) == 0
+                      else list(element_size_xyz(elem_size))),
+        **geometry_metadata(
+            nelx, nely, nelz, elem_size,
+            x_axis_scale=x_axis_scale,
+            y_axis_scale=y_axis_scale,
+            z_axis_scale=z_axis_scale,
+        ),
         "tolx": tolx,
         "maxloop": maxloop,
         "runtime_seconds": run_time,

@@ -24,12 +24,13 @@ def _global_displacement_from_local(local_displacement):
         (2, 0, 5),
     ],
 )
+@pytest.mark.parametrize("elem_size", [0.7, (0.7, 0.2, 0.04)])
 def test_affine_states_recover_each_voigt_stress_component(
     displacement_axis,
     coordinate_axis,
     stress_component,
+    elem_size,
 ):
-    elem_size = 0.7
     coordinates = np.asarray(H8_NODE_OFFSETS, dtype=float) * elem_size
     local_displacement = np.zeros((8, 3))
     local_displacement[:, displacement_axis] = coordinates[:, coordinate_axis]
@@ -54,9 +55,9 @@ def test_affine_states_recover_each_voigt_stress_component(
     np.testing.assert_allclose(stress, expected_stress_gauss, atol=1e-13)
 
 
-def _solve_single_element_bar(total_force):
-    elem_size = 0.2
-    area = elem_size**2
+def _solve_single_element_bar(total_force, elem_size=0.2):
+    dx, dy, dz = np.broadcast_to(elem_size, (3,))
+    area = dy * dz
     material_params = (
         2.0e9,
         2.0e9,
@@ -103,13 +104,14 @@ def _solve_single_element_bar(total_force):
     return stress, total_force / area
 
 
-def test_rectangular_bar_stress_matches_force_over_area():
-    stress, expected_axial_stress = _solve_single_element_bar(2_000.0)
+@pytest.mark.parametrize("elem_size", [0.2, (0.2, 0.03, 0.005)])
+def test_rectangular_bar_stress_matches_force_over_area(elem_size):
+    stress, expected_axial_stress = _solve_single_element_bar(2_000.0, elem_size)
 
     np.testing.assert_allclose(
         stress[0, :, 0], expected_axial_stress, rtol=1e-12, atol=1e-8
     )
-    np.testing.assert_allclose(stress[0, :, 1:], 0.0, atol=1e-8)
+    np.testing.assert_allclose(stress[0, :, 1:], 0.0, atol=expected_axial_stress * 1e-12)
 
 
 def test_recovered_stress_scales_linearly_with_force():

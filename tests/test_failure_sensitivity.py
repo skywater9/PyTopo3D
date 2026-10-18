@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import pytest
 import scipy.sparse as sp
 from scipy.sparse.linalg import spsolve
 
@@ -24,11 +25,10 @@ from pytopo3d.utils.filter import build_filter, build_physical_density
 from pytopo3d.utils.stiffness import lk_H8, make_C_matrix
 
 
-def _gradient_problem():
+def _gradient_problem(elem_size=0.01):
     nelx, nely, nelz = 8, 4, 1
     shape = (nely, nelx, nelz)
     ndof = 3 * (nelx + 1) * (nely + 1) * (nelz + 1)
-    elem_size = 0.01
     penal = 3.0
     orientation = "yzx"
     material_params = apply_material_orientation(
@@ -128,8 +128,9 @@ def _evaluate_design(problem, x, *, relaxation_exponent=0.5):
     return stiffness, displacement, density, projection_derivative, partials
 
 
-def test_complete_adjoint_gradient_matches_filtered_projected_finite_difference():
-    problem = _gradient_problem()
+@pytest.mark.parametrize("elem_size", [0.01, (0.01, 0.006, 0.004)])
+def test_complete_adjoint_gradient_matches_filtered_projected_finite_difference(elem_size):
+    problem = _gradient_problem(elem_size)
     x = problem["x"]
     stiffness, displacement, density, projection_derivative, base_partials = (
         _evaluate_design(problem, x)
@@ -179,7 +180,13 @@ def test_complete_adjoint_gradient_matches_filtered_projected_finite_difference(
 
     free_indices = np.flatnonzero(~problem["fixed"].ravel(order="F"))
     selected = free_indices[[2, len(free_indices) // 2, -3]]
-    errors_by_step = {step: [] for step in (1.0e-3, 1.0e-4, 1.0e-5, 1.0e-6)}
+    # The excluded void has 1e-9 ersatz stiffness. With rectangular elements,
+    # cancellation in the sparse solves dominates the tiniest perturbations;
+    # use the two stable step sizes for that case.
+    steps = (1.0e-3, 1.0e-4)
+    if np.ndim(elem_size) == 0:
+        steps += (1.0e-5, 1.0e-6)
+    errors_by_step = {step: [] for step in steps}
     x_flat = x.ravel(order="F")
     important = (
         base_partials.aggregate_failure_index_derivative
@@ -231,8 +238,9 @@ def test_complete_adjoint_gradient_matches_filtered_projected_finite_difference(
 
     assert max(errors_by_step[1.0e-3]) < 2.0e-3
     assert max(errors_by_step[1.0e-4]) < 2.0e-4
-    assert max(errors_by_step[1.0e-5]) < 2.0e-4
-    assert max(errors_by_step[1.0e-6]) < 2.0e-3
+    if np.ndim(elem_size) == 0:
+        assert max(errors_by_step[1.0e-5]) < 2.0e-4
+        assert max(errors_by_step[1.0e-6]) < 2.0e-3
 
 
 def test_q_below_one_rejects_eligible_zero_but_allows_excluded_void():

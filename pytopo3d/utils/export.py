@@ -10,6 +10,8 @@ from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import distance_transform_edt
 from skimage import measure
 
+from pytopo3d.utils.element_size import ElementSize, element_size_xyz
+
 
 def voxel_to_stl(
     input_file: Union[str, np.ndarray],
@@ -21,7 +23,7 @@ def voxel_to_stl(
     smooth_mesh: bool = True,
     smooth_iterations: int = 5,
     upscale_factor: Optional[int] = 3,
-    elem_size: float = 1.0,
+    elem_size: ElementSize = 1.0,
     array_order: str = "xyz",
 ) -> Union[str, trimesh.Trimesh]:
     """
@@ -48,8 +50,9 @@ def voxel_to_stl(
         Number of iterations for mesh smoothing (default: 5)
     upscale_factor : Optional[int], optional
         Factor to upscale voxel resolution before meshing (default: 3)
-    elem_size : float, optional
-        Physical edge length of one voxel. Output coordinates use the same
+    elem_size : float or sequence of three floats, optional
+        Physical edge length of one voxel, or its three XYZ edge lengths
+        (independent of array_order). Output coordinates use the same
         unit; PyTopo3D's CLI supplies meters (default: 1.0).
     array_order : str, optional
         Axis order of ``voxel_data``. Project density fields use ``"yxz"``;
@@ -68,8 +71,7 @@ def voxel_to_stl(
     else:
         raise TypeError("input_file must be a string path or a NumPy array.")
 
-    if not np.isfinite(elem_size) or elem_size <= 0.0:
-        raise ValueError(f"elem_size must be positive, got {elem_size}")
+    sizes = np.asarray(element_size_xyz(elem_size))
     if padding < 0:
         raise ValueError(f"padding must be nonnegative, got {padding}")
     if upscale_factor is not None and upscale_factor < 1:
@@ -148,7 +150,7 @@ def voxel_to_stl(
             faces=np.asarray(faces_list, dtype=np.int64),
             process=False,
         )
-        mesh.vertices *= elem_size
+        mesh.vertices *= sizes
 
         if fix_mesh:
             mesh = mesh.process(validate=True)
@@ -202,13 +204,13 @@ def voxel_to_stl(
     vertices: np.ndarray
     faces: np.ndarray
     normals: np.ndarray
-    refined_spacing = elem_size / (
+    refined_spacing = sizes / (
         upscale_factor if upscale_factor and upscale_factor > 1 else 1
     )
     vertices, faces, normals, _ = measure.marching_cubes(
         padded_data,
         level=level,
-        spacing=(refined_spacing, refined_spacing, refined_spacing),
+        spacing=tuple(refined_spacing),
         method="lewiner",
         gradient_direction="ascent",
     )
@@ -238,7 +240,7 @@ def voxel_to_stl(
 
     # 8. Remove the physical offset introduced by zero padding.
     if padding > 0:
-        mesh.vertices -= padding * elem_size
+        mesh.vertices -= padding * sizes
 
     # 9. Save the mesh as an STL file or return the mesh object
     if output_file:

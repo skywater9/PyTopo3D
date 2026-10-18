@@ -79,8 +79,8 @@ def test_lk_H8_is_invariant_under_physical_reflection(axis):
 
 
 @pytest.mark.parametrize("axis", range(3))
-def test_lk_H8_reproduces_affine_normal_strain_energy(axis):
-    elem_size = 0.7
+@pytest.mark.parametrize("elem_size", [0.7, (0.7, 0.2, 0.04)])
+def test_lk_H8_reproduces_affine_normal_strain_energy(axis, elem_size):
     stiffness = lk_H8(*ORTHOTROPIC_PARAMS, elem_size=elem_size)
     constitutive = make_C_matrix(*ORTHOTROPIC_PARAMS)
     coordinates = _element_coordinates(elem_size)
@@ -88,7 +88,8 @@ def test_lk_H8_reproduces_affine_normal_strain_energy(axis):
     displacement[:, axis] = coordinates[:, axis]
 
     actual_energy = displacement.ravel() @ stiffness @ displacement.ravel()
-    expected_energy = elem_size**3 * constitutive[axis, axis]
+    volume = np.prod(np.broadcast_to(elem_size, (3,)))
+    expected_energy = volume * constitutive[axis, axis]
     assert actual_energy == pytest.approx(expected_energy, rel=1.0e-12)
 
 
@@ -100,19 +101,21 @@ def test_lk_H8_reproduces_affine_normal_strain_energy(axis):
         (2, 0, ORTHOTROPIC_PARAMS[5]),  # gamma_zx -> G_zx
     ),
 )
+@pytest.mark.parametrize("elem_size", [0.7, (0.7, 0.2, 0.04)])
 def test_lk_H8_reproduces_affine_shear_energy(
     displacement_axis,
     coordinate_axis,
     shear_modulus,
+    elem_size,
 ):
-    elem_size = 0.7
     stiffness = lk_H8(*ORTHOTROPIC_PARAMS, elem_size=elem_size)
     coordinates = _element_coordinates(elem_size)
     displacement = np.zeros((8, 3))
     displacement[:, displacement_axis] = coordinates[:, coordinate_axis]
 
     actual_energy = displacement.ravel() @ stiffness @ displacement.ravel()
-    expected_energy = elem_size**3 * shear_modulus
+    volume = np.prod(np.broadcast_to(elem_size, (3,)))
+    expected_energy = volume * shear_modulus
     assert actual_energy == pytest.approx(expected_energy, rel=1.0e-12)
 
 

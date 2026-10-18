@@ -7,6 +7,8 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from pytopo3d.utils.element_size import DEFAULT_ELEMENT_SIZE, resolve_element_size
+
 
 def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     """
@@ -44,7 +46,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     basic_group.add_argument(
         "--penal", type=float, default=3.0, help="Penalty parameter"
     )
-    basic_group.add_argument("--rmin", type=float, default=3.0, help="Filter radius")
+    basic_group.add_argument("--rmin", type=float, default=3.0, help="Filter radius in element-grid units")
     basic_group.add_argument(
         "--beta-schedule",
         nargs="+",
@@ -174,9 +176,17 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     variable_experiment_group.add_argument(
         "--elem-size",
         type=float,
-        default=0.01,
-        help="Element size (meters)",
+        default=argparse.SUPPRESS,
+        help="Uniform element edge length in meters (default: 0.01); incompatible with axis-scale flags",
     )
+    for axis in "xyz":
+        variable_experiment_group.add_argument(
+            f"--{axis}-axis-scale",
+            type=float,
+            default=None,
+            help=(f"Total {axis.upper()} domain length in meters; element edge length is "
+                  f"this value / nel{axis}. Omitted axes retain 0.01 m per element"),
+        )
     variable_experiment_group.add_argument(
         "--material-preset",
         type=str,
@@ -387,7 +397,24 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Skip optimization and create a solid block for FEA testing",
     )
 
-    return parser.parse_args(args)
+    parsed = parser.parse_args(args)
+    try:
+        # Validate explicit options before restoring the legacy default. Actual
+        # resolution happens after imported geometry has set the element counts.
+        resolve_element_size(
+            parsed.nelx, parsed.nely, parsed.nelz, getattr(parsed, "elem_size", None),
+            x_axis_scale=parsed.x_axis_scale,
+            y_axis_scale=parsed.y_axis_scale,
+            z_axis_scale=parsed.z_axis_scale,
+            target_physical_x=parsed.target_physical_x,
+        )
+        if parsed.target_nelx is not None and parsed.target_nelx < 1:
+            raise ValueError("--target-nelx must be a positive integer")
+    except ValueError as error:
+        parser.error(str(error))
+    if not hasattr(parsed, "elem_size"):
+        parsed.elem_size = DEFAULT_ELEMENT_SIZE
+    return parsed
 
 
 def generate_experiment_name(args: argparse.Namespace) -> str:

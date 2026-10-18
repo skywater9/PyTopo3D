@@ -6,6 +6,8 @@ from typing import Tuple
 
 import numpy as np
 
+from pytopo3d.utils.element_size import ElementSize
+
 from pytopo3d.utils.stiffness import h8_gauss_integration_data
 
 
@@ -202,7 +204,7 @@ def recover_gauss_strain(
     displacement: np.ndarray,
     edof_matrix: np.ndarray,
     *,
-    elem_size: float = 1.0,
+    elem_size: ElementSize = 1.0,
 ) -> np.ndarray:
     """Recover engineering strain at all eight H8 Gauss points.
 
@@ -227,7 +229,7 @@ def recover_gauss_stress(
     edof_matrix: np.ndarray,
     constitutive_matrix: np.ndarray,
     *,
-    elem_size: float = 1.0,
+    elem_size: ElementSize = 1.0,
     return_strain: bool = False,
 ) -> np.ndarray | Tuple[np.ndarray, np.ndarray]:
     """Recover full-density global stress at every H8 Gauss point.

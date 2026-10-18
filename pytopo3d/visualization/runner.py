@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pytopo3d.utils.results_manager import ResultsManager
+from pytopo3d.utils.element_size import ElementSize
 from pytopo3d.visualization.display import display_3D
 
 
@@ -27,6 +28,7 @@ def create_visualization(
     dpi: int = 300,
     figsize: Tuple[int, int] = (10, 8),
     alphas: Union[float, List[float]] = 0.9,
+    elem_size: Optional[ElementSize] = None,
 ) -> str:
     """
     Create and save a visualization using the display_3D function.
@@ -108,6 +110,7 @@ def create_visualization(
 
     # Create visualization
     fig = display_3D(
+        elem_size=elem_size,
         densities=arrays,
         thresholds=thresholds,
         colors=colors,

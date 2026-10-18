@@ -15,7 +15,7 @@ from pytopo3d.core.optimizer import (
     evaluate_fixed_geometry_compliance,
     evaluate_fixed_geometry_metrics,
 )
-from pytopo3d.preprocessing.geometry import load_geometry_data
+from pytopo3d.preprocessing.geometry import load_geometry_data, visualize_design_space_mask
 from pytopo3d.runners.experiment import (
     execute_optimization,
     export_result_to_stl,
@@ -34,6 +34,7 @@ from pytopo3d.utils.config_loader import (
 )
 from pytopo3d.utils.boundary import create_bc_visualization_arrays, create_bc_visualization_arrays_from_masks
 from pytopo3d.utils.metrics import collect_metrics
+from pytopo3d.utils.element_size import resolve_cli_element_size
 from pytopo3d.visualization.visualizer import (
     create_optimization_animation,
     visualize_final_result,
@@ -71,6 +72,7 @@ def main():
 
         # Load design space and obstacle data
         design_space_mask, obstacle_mask, combined_obstacle_mask, args.nelx, args.nely, args.nelz = load_geometry_data(
+            visualize=False,
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
@@ -84,8 +86,14 @@ def main():
             results_mgr=results_mgr,
         )
 
-        if getattr(args, "target_physical_x", None) is not None:  
-            args.elem_size = args.target_physical_x / args.nelx # in meters
+        args.elem_size = resolve_cli_element_size(args)
+        logger.info("Physical element dimensions (XYZ, meters): %s", args.elem_size)
+        if args.design_space_stl:
+            visualize_design_space_mask(
+                design_space_mask.transpose(1, 0, 2),
+                args.experiment_name, results_mgr, logger,
+                elem_size=args.elem_size,
+            )
 
         # Determine number of DOFs
         ndof = 3 * (args.nelx + 1) * (args.nely + 1) * (args.nelz + 1)
@@ -197,6 +205,10 @@ def main():
 
         # Create and save initial visualization
         visualize_initial_setup(
+            x_axis_scale=args.x_axis_scale,
+            y_axis_scale=args.y_axis_scale,
+            z_axis_scale=args.z_axis_scale,
+            elem_size=args.elem_size,
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
@@ -516,6 +528,7 @@ def main():
 
         # Create visualization of the final result
         visualize_final_result(
+            elem_size=args.elem_size,
             nelx=args.nelx,
             nely=args.nely,
             nelz=args.nelz,
@@ -533,6 +546,7 @@ def main():
         gif_path = None
         if history:
             gif_path = create_optimization_animation(
+                elem_size=args.elem_size,
                 nelx=args.nelx,
                 nely=args.nely,
                 nelz=args.nelz,
@@ -566,6 +580,9 @@ def main():
 
         # Collect and save metrics
         metrics = collect_metrics(
+            x_axis_scale=args.x_axis_scale,
+            y_axis_scale=args.y_axis_scale,
+            z_axis_scale=args.z_axis_scale,
             terminal_input=terminal_input,
             nelx=args.nelx,
             nely=args.nely,

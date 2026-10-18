@@ -8,6 +8,7 @@ for a hexahedral (H8) element.
 import numpy as np
 
 from pytopo3d.utils.assembly import H8_NODE_OFFSETS
+from pytopo3d.utils.element_size import ElementSize, element_size_xyz
 
 
 H8_GAUSS_POINTS = np.array(
@@ -75,13 +76,12 @@ def h8_strain_displacement_matrix(shape_gradients: np.ndarray) -> np.ndarray:
     return matrix
 
 
-def h8_gauss_integration_data(elem_size: float = 1.0):
+def h8_gauss_integration_data(elem_size: ElementSize = 1.0):
     """Return B matrices, Jacobian determinants, and weights at 8 Gauss points."""
-    if not np.isfinite(elem_size) or elem_size <= 0.0:
-        raise ValueError(f"elem_size must be finite and positive, got {elem_size}")
+    sizes = np.asarray(element_size_xyz(elem_size))
 
     node_signs = 2.0 * np.asarray(H8_NODE_OFFSETS, dtype=float) - 1.0
-    coordinates = node_signs * (0.5 * elem_size)
+    coordinates = node_signs * (0.5 * sizes)
     matrices = np.empty((8, 6, 24), dtype=float)
     determinants = np.empty(8, dtype=float)
     weights = np.ones(8, dtype=float)
@@ -110,7 +110,7 @@ def lk_H8(
     nu_xy: float = 0.3,
     nu_yz: float = None,
     nu_zx: float = None,
-    elem_size: float = 1.0
+    elem_size: ElementSize = 1.0
 ) -> np.ndarray:
     """
     Generate the 24x24 element stiffness matrix for a fully anisotropic material
@@ -124,8 +124,9 @@ def lk_H8(
         Poisson's ratios.
     G_xy, G_yz, G_zx : float
         Shear moduli.
-    elem_size : float
-        Side length of each H8 element in meters.
+    elem_size : float or sequence of three floats
+        Edge length of a cubic element, or XYZ edge lengths of a rectangular
+        H8 element, in meters.
 
     Returns
     -------

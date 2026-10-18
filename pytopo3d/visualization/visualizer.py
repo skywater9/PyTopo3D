@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 import numpy as np
 
 from pytopo3d.utils.results_manager import ResultsManager
+from pytopo3d.utils.element_size import ElementSize, geometry_metadata
 from pytopo3d.visualization.animation import save_optimization_gif
 from pytopo3d.visualization.runner import create_visualization
 
@@ -27,6 +28,10 @@ def visualize_initial_setup(
     results_mgr: Optional[ResultsManager] = None,
     combined_obstacle_mask: Optional[np.ndarray] = None,
     protected_zone_mask: Optional[np.ndarray] = None,
+    elem_size: Optional[ElementSize] = None,
+    x_axis_scale: Optional[float] = None,
+    y_axis_scale: Optional[float] = None,
+    z_axis_scale: Optional[float] = None,
 ) -> str:
     """
     Create and save initial visualization showing boundary conditions and obstacles.
@@ -69,6 +74,13 @@ def visualize_initial_setup(
             "experiment_name": experiment_name,
         }
 
+        if elem_size is not None:
+            config.update(geometry_metadata(
+                nelx, nely, nelz, elem_size,
+                x_axis_scale=x_axis_scale,
+                y_axis_scale=y_axis_scale,
+                z_axis_scale=z_axis_scale,
+            ))
         results_mgr.save_config(config)
         if logger:
             logger.debug("Configuration saved")
@@ -116,6 +128,7 @@ def visualize_initial_setup(
         )
 
     boundary_viz_path = create_visualization(
+        elem_size=elem_size,
         arrays=arrays_to_visualize,
         thresholds=thresholds,
         colors=colors,
@@ -145,6 +158,7 @@ def visualize_final_result(
     combined_obstacle_mask: Optional[np.ndarray] = None,
     loads_array: Optional[np.ndarray] = None,
     constraints_array: Optional[np.ndarray] = None,
+    elem_size: Optional[ElementSize] = None,
 ) -> str:
     """
     Create and save visualization of the final optimization result.
@@ -182,6 +196,7 @@ def visualize_final_result(
     combined_alphas = [0.9, 0.3, 0.9, 0.9]  # Make obstacles transparent
 
     combined_viz_path = create_visualization(
+        elem_size=elem_size,
         arrays=combined_arrays,
         thresholds=combined_thresholds,
         colors=combined_colors,
@@ -211,6 +226,7 @@ def create_optimization_animation(
     combined_obstacle_mask: Optional[np.ndarray] = None,
     loads_array: Optional[np.ndarray] = None,
     constraints_array: Optional[np.ndarray] = None,
+    elem_size: Optional[ElementSize] = None,
 ) -> Optional[str]:
     """
     Create an animation of the optimization process if history was captured.
@@ -263,6 +279,7 @@ def create_optimization_animation(
         # Create the animation
         try:
             gif_path = save_optimization_gif(
+                elem_size=elem_size,
                 frames=history_frames,
                 obstacle_mask=combined_obstacle_mask,
                 loads_array=loads_array,

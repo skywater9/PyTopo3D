@@ -271,7 +271,7 @@ The main optimization parameters are:
 - `nelx`, `nely`, `nelz`: Number of elements in x, y, z directions (default: 60, 30, 20)
 - `volfrac`: Volume fraction constraint (0.0-1.0) (default: 0.3)
 - `penal`: Penalization power for SIMP method (default: 3.0)
-- `rmin`: Radius of the density filter applied before projection (default: 3.0)
+- `rmin`: Radius of the density filter in element-grid units, applied before projection (default: 3.0)
 - `beta_schedule`: Heaviside continuation stages (default: `1 2 4 8`)
 - `projection_eta`: Heaviside threshold (default: 0.5)
 - `move_limit`: Maximum OC design-variable change per iteration (default: 0.2)
@@ -287,6 +287,51 @@ The main optimization parameters are:
 - `disp_thres`: Display threshold for 3D visualization (elements with density > disp_thres are shown) (default: 0.5)
 - `tolx`: Convergence tolerance on design change (default: 0.01)
 - `maxloop`: Maximum nonlinear evaluations per projection stage (default: 2000); MMA uses the final budgeted evaluation for current constraint reporting
+
+### Physical dimensions and thin coupons
+
+`--elem-size` sets a uniform cubic element edge length in meters (default:
+`0.01`). To use rectangular elements, set the total domain lengths with
+`--x-axis-scale`, `--y-axis-scale`, and `--z-axis-scale`, also in meters:
+
+```powershell
+python main.py --nelx 100 --nely 50 --nelz 1 --x-axis-scale 1.0 --y-axis-scale 0.5 --z-axis-scale 0.005 --export-stl --export-mode blocky
+```
+
+This represents a 1 m × 0.5 m × 5 mm domain using 10 mm × 10 mm × 5 mm
+elements. One element through Z spans the full 5 mm thickness. For a
+180 × 130 × 1 grid with 1 mm in-plane resolution and 4 mm thickness, use
+`--x-axis-scale 0.180 --y-axis-scale 0.130 --z-axis-scale 0.004`.
+
+Each element edge is the requested axis length divided by the number of
+elements on that axis. You can specify any subset of the three flags; an
+unspecified axis retains **0.01 m per element**. The lengths describe the full
+design domain, including voids, rather than the occupied material's bounding
+box. With imported STL geometry, sizing uses the final voxelized element
+counts. Axis scaling does not change those counts or add elements.
+
+Supplying any axis-scale flag together with an explicit `--elem-size` is an
+error, even if `--elem-size 0.01` is specified. Axis-scale flags also cannot be
+combined with `--target-physical-x`: that legacy option sets a uniform element
+size using the X length. All lengths must be finite and positive, and element
+counts must be positive integers.
+
+The resolved XYZ dimensions are used by stiffness, stress and failure
+calculations, physical volumes, visualizations, and STL export. `rmin` remains
+in element-grid units; its neighborhood follows the rectangular grid, rather
+than specifying a spherical radius in meters. Load/support presets and obstacle
+ranges retain their existing grid-coordinate interpretation.
+
+Python APIs that accept `elem_size` accept either the existing scalar or three
+element edge lengths in **global XYZ order**, for example
+`elem_size=(0.001, 0.001, 0.004)`. These API values are per-element dimensions;
+the CLI axis-scale flags specify total domain lengths. XYZ sizes use this order
+even when density arrays are stored as `(nely, nelx, nelz)`.
+
+`config.json` and `metrics.json` record the requested axis scales,
+`element_size_xyz_m`, `domain_size_xyz_m`, and `element_volume_m3`. The saved
+density `.npy` array retains its grid shape; use the geometry metadata when
+re-exporting it.
 
 The optimizer uses one consistent material field throughout the workflow:
 
@@ -552,11 +597,13 @@ Options:
 
 Density export consumes the exact projected field returned by the optimizer;
 it does not apply a second Heaviside projection. Mesh coordinates are scaled by
-`elem_size`, and the internal `(nely, nelx, nelz)` array is mapped to XYZ at the
+the resolved XYZ element edge lengths, and the internal `(nely, nelx, nelz)` array is mapped to XYZ at the
 export boundary.
-Because `elem_size` is specified in meters, exported STL coordinates are also
+Because physical dimensions are specified in meters, exported STL coordinates are also
 in meters (STL itself does not encode a unit). Convert by 1000 when importing
 into software configured to interpret raw STL coordinates as millimeters.
+Blocky export preserves occupied rectangular element boundaries exactly.
+Interpolated and smoothed surfaces can differ slightly from those boundaries.
 
 Each run records the final design-variable, filtered-density, and physical-
 density fractions over the free region, the 0.05--0.95 gray fraction, the final

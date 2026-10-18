@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, Optional
 
 import numpy as np
+
+from pytopo3d.utils.element_size import ElementSize
 import scipy.sparse as sp
 from scipy.sparse.linalg import spsolve
 
@@ -115,7 +117,7 @@ def evaluate_failure_partials(
     density: np.ndarray,
     strength: MaterialStrength | Mapping[str, object],
     *,
-    elem_size: float = 1.0,
+    elem_size: ElementSize = 1.0,
     relaxation_exponent: float = 0.5,
     aggregate_exponent: float = 8.0,
     correction_factor: float = 1.0,
@@ -424,7 +426,7 @@ def evaluate_failure_sensitivity(
     simp_penal: float,
     stiffness_solid_scale: float = 1.0,
     stiffness_void_scale: float = 1.0e-9,
-    elem_size: float = 1.0,
+    elem_size: ElementSize = 1.0,
     relaxation_exponent: float = 0.5,
     aggregate_exponent: float = 8.0,
     correction_factor: float = 1.0,

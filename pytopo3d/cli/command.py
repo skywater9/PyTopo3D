@@ -17,7 +17,7 @@ from pytopo3d.core.optimizer import (
     evaluate_fixed_geometry_compliance,
     evaluate_fixed_geometry_metrics,
 )
-from pytopo3d.preprocessing.geometry import load_geometry_data
+from pytopo3d.preprocessing.geometry import load_geometry_data, visualize_design_space_mask
 from pytopo3d.runners.experiment import (
     execute_optimization,
     export_result_to_stl,
@@ -41,6 +41,7 @@ from pytopo3d.utils.config_loader import (
     parse_material_orientation_xyz,
 )
 from pytopo3d.utils.metrics import collect_metrics
+from pytopo3d.utils.element_size import resolve_cli_element_size
 from pytopo3d.visualization.visualizer import (
     create_optimization_animation,
     visualize_final_result,
@@ -97,6 +98,7 @@ def main(args: Optional[List[str]] = None) -> int:
             parsed_args.nely,
             parsed_args.nelz,
         ) = load_geometry_data(
+            visualize=False,
             nelx=parsed_args.nelx,
             nely=parsed_args.nely,
             nelz=parsed_args.nelz,
@@ -110,8 +112,14 @@ def main(args: Optional[List[str]] = None) -> int:
             results_mgr=results_mgr,
         )
 
-        if getattr(parsed_args, "target_physical_x", None) is not None:
-            parsed_args.elem_size = parsed_args.target_physical_x / parsed_args.nelx
+        parsed_args.elem_size = resolve_cli_element_size(parsed_args)
+        logger.info("Physical element dimensions (XYZ, meters): %s", parsed_args.elem_size)
+        if parsed_args.design_space_stl:
+            visualize_design_space_mask(
+                design_space_mask.transpose(1, 0, 2),
+                parsed_args.experiment_name, results_mgr, logger,
+                elem_size=parsed_args.elem_size,
+            )
 
         ndof = 3 * (parsed_args.nelx + 1) * (parsed_args.nely + 1) * (parsed_args.nelz + 1)
 
@@ -231,6 +239,10 @@ def main(args: Optional[List[str]] = None) -> int:
 
         # Create and save initial visualization
         visualize_initial_setup(
+            x_axis_scale=parsed_args.x_axis_scale,
+            y_axis_scale=parsed_args.y_axis_scale,
+            z_axis_scale=parsed_args.z_axis_scale,
+            elem_size=parsed_args.elem_size,
             nelx=parsed_args.nelx,
             nely=parsed_args.nely,
             nelz=parsed_args.nelz,
@@ -442,6 +454,7 @@ def main(args: Optional[List[str]] = None) -> int:
 
         # Create visualization of the final result
         visualize_final_result(
+            elem_size=parsed_args.elem_size,
             nelx=parsed_args.nelx,
             nely=parsed_args.nely,
             nelz=parsed_args.nelz,
@@ -459,6 +472,7 @@ def main(args: Optional[List[str]] = None) -> int:
         gif_path = None
         if history:
             gif_path = create_optimization_animation(
+                elem_size=parsed_args.elem_size,
                 nelx=parsed_args.nelx,
                 nely=parsed_args.nely,
                 nelz=parsed_args.nelz,
@@ -492,6 +506,9 @@ def main(args: Optional[List[str]] = None) -> int:
 
         # Collect and save metrics
         metrics = collect_metrics(
+            x_axis_scale=parsed_args.x_axis_scale,
+            y_axis_scale=parsed_args.y_axis_scale,
+            z_axis_scale=parsed_args.z_axis_scale,
             terminal_input=terminal_input,
             nelx=parsed_args.nelx,
             nely=parsed_args.nely,
